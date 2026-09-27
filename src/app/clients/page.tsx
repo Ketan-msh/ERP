@@ -95,7 +95,7 @@ export default function ClientsPage() {
 
   const handleCreateClient = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name) return;
+    if (!name.trim()) return;
     setSubmitting(true);
 
     try {
@@ -103,7 +103,7 @@ export default function ClientsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name,
+          name: name.trim(),
           color,
           servicePackage,
           packageTier,
@@ -117,11 +117,16 @@ export default function ClientsPage() {
       if (res.ok) {
         setShowAddModal(false);
         setName('');
+        setAssignedUserIds([]);
         fetchClients();
         triggerRefresh();
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        alert(errorData.error || 'Failed to create client account. Please try again.');
       }
     } catch (err) {
       console.error('Create client failed:', err);
+      alert('An unexpected error occurred while creating the client account.');
     } finally {
       setSubmitting(false);
     }
@@ -306,17 +311,17 @@ export default function ClientsPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="block font-semibold uppercase tracking-wider text-muted-foreground mb-1">
-                    Brand Accent Hex Color
+                    Brand Accent Color
                   </label>
                   <div className="flex gap-2 items-center">
                     <input
                       type="color"
                       value={color}
                       onChange={(e) => setColor(e.target.value)}
-                      className="h-8 w-12 rounded border border-input p-0 bg-transparent cursor-pointer"
+                      className="h-8 w-10 rounded border border-input p-0 bg-transparent cursor-pointer"
                     />
                     <input
                       type="text"
@@ -329,12 +334,29 @@ export default function ClientsPage() {
 
                 <div>
                   <label className="block font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                    Service Package
+                  </label>
+                  <select
+                    value={servicePackage}
+                    onChange={(e) => setServicePackage(e.target.value)}
+                    className="w-full rounded-md border border-input bg-background px-2 py-2 text-xs focus:border-[#FF3B00] outline-hidden"
+                  >
+                    <option value="Social & Growth">Social & Growth</option>
+                    <option value="Full Stack Growth">Full Stack Growth</option>
+                    <option value="Ads & Performance">Ads & Performance</option>
+                    <option value="Content Production">Content Production</option>
+                    <option value="Brand Strategy">Brand Strategy</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold uppercase tracking-wider text-muted-foreground mb-1">
                     Package Tier
                   </label>
                   <select
                     value={packageTier}
                     onChange={(e) => setPackageTier(e.target.value)}
-                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:border-[#FF3B00] outline-hidden"
+                    className="w-full rounded-md border border-input bg-background px-2 py-2 text-xs focus:border-[#FF3B00] outline-hidden"
                   >
                     <option value="Basic">Basic</option>
                     <option value="Standard">Standard</option>
