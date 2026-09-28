@@ -68,11 +68,11 @@ function DroppableDayCell({
     <div
       ref={setNodeRef}
       onClick={onQuickAdd}
-      className={`min-h-32 bg-card p-2 transition-all relative flex flex-col justify-between group cursor-pointer ${
-        isOver ? 'ring-2 ring-[#FF3B00] bg-[#FF3B00]/10 scale-[1.01] z-20 shadow-xl' : ''
-      } ${isCurrentDay ? 'bg-[#FF3B00]/5 ring-2 ring-[#FF3B00] z-10' : ''}`}
+      className={`min-h-32 bg-card p-2 transition-colors relative flex flex-col justify-between group cursor-pointer ${
+        isOver ? 'ring-2 ring-[#FF3B00] bg-[#FF3B00]/15 z-20 shadow-lg' : ''
+      } ${isCurrentDay ? 'bg-[#FF3B00]/5 ring-1 ring-[#FF3B00]/50 z-10' : ''}`}
     >
-      <div className="flex justify-between items-center mb-1">
+      <div className="flex justify-between items-center mb-1 pointer-events-none">
         <span
           className={`text-xs font-bold h-6 w-6 rounded-full flex items-center justify-center ${
             isCurrentDay ? 'bg-[#FF3B00] text-white' : 'text-foreground/80 font-mono'
@@ -85,7 +85,7 @@ function DroppableDayCell({
             e.stopPropagation();
             onQuickAdd();
           }}
-          className="opacity-0 group-hover:opacity-100 text-[#FF3B00] hover:scale-110 transition-all"
+          className="opacity-0 group-hover:opacity-100 text-[#FF3B00] hover:scale-110 transition-all pointer-events-auto"
           title="Quick Add on this date"
         >
           <Plus className="h-4 w-4" />
@@ -98,34 +98,25 @@ function DroppableDayCell({
 }
 
 function DraggableContentCard({ item, onClick }: { item: any; onClick: () => void }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: item.id,
   });
-
-  const style: React.CSSProperties = {
-    ...(transform
-      ? {
-          transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
-          zIndex: 999,
-        }
-      : {}),
-    backgroundColor: item.client?.color || '#FF3B00',
-    pointerEvents: isDragging ? 'none' : 'auto',
-  };
 
   return (
     <div
       ref={setNodeRef}
-      style={style}
       {...listeners}
       {...attributes}
       onClick={(e) => {
         e.stopPropagation();
         onClick();
       }}
-      className={`rounded-lg px-2 py-0.5 text-[10px] font-semibold text-white shadow-xs cursor-grab active:cursor-grabbing hover:brightness-110 transition-all border border-black/20 group/card w-fit max-w-full flex flex-col gap-0.5 ${
-        isDragging ? 'opacity-40 scale-105 shadow-2xl ring-2 ring-white z-50' : ''
+      className={`rounded-lg px-2 py-0.5 text-[10px] font-semibold text-white shadow-xs cursor-grab active:cursor-grabbing hover:brightness-110 border border-black/20 group/card w-fit max-w-full flex flex-col gap-0.5 select-none transition-opacity ${
+        isDragging ? 'opacity-25 scale-95' : 'opacity-100'
       }`}
+      style={{
+        backgroundColor: item.client?.color || '#FF3B00',
+      }}
     >
       <div className="flex items-center gap-1 pointer-events-none max-w-full">
         <GripVertical className="h-2.5 w-2.5 opacity-60 group-hover/card:opacity-100 shrink-0" />
@@ -339,6 +330,21 @@ export default function PlanningPage() {
     return rectIntersection(args);
   };
 
+  const getItemDateString = (scheduledDate: any) => {
+    if (!scheduledDate) return '';
+    if (typeof scheduledDate === 'string' && scheduledDate.length >= 10) {
+      const datePart = scheduledDate.split('T')[0];
+      if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+        return datePart;
+      }
+    }
+    try {
+      return format(new Date(scheduledDate), 'yyyy-MM-dd');
+    } catch {
+      return '';
+    }
+  };
+
   const handleDragStart = (event: DragStartEvent) => {
     const item = contentItems.find((i) => i.id === event.active.id);
     if (item) setActiveDragItem(item);
@@ -366,7 +372,7 @@ export default function PlanningPage() {
     const targetDate = new Date(year, month, day, 12, 0, 0);
     const targetIso = targetDate.toISOString();
 
-    // Optimistically update local state immediately
+    // Optimistically update local state immediately (instant 0ms lag)
     setContentItems((prev) =>
       prev.map((item) =>
         item.id === itemId
@@ -376,7 +382,7 @@ export default function PlanningPage() {
     );
 
     try {
-      const res = await fetch('/api/content', {
+      await fetch('/api/content', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -384,15 +390,8 @@ export default function PlanningPage() {
           scheduledDate: targetIso,
         }),
       });
-
-      if (res.ok) {
-        triggerRefresh();
-      } else {
-        fetchCalendarData();
-      }
     } catch (err) {
-      console.warn('Drag reschedule fallback:', err);
-      fetchCalendarData();
+      console.warn('Drag reschedule API error:', err);
     }
   };
 
@@ -628,10 +627,7 @@ export default function PlanningPage() {
               {daysInMonth.map((day) => {
                 const dateId = format(day, 'yyyy-MM-dd');
                 const dayItems = filteredContent
-                  .filter((item) => {
-                    if (!item.scheduledDate) return false;
-                    return format(new Date(item.scheduledDate), 'yyyy-MM-dd') === dateId;
-                  })
+                  .filter((item) => getItemDateString(item.scheduledDate) === dateId)
                   .sort((a, b) => a.id.localeCompare(b.id));
 
                 const isCurrentDay = isToday(day) || isSameDay(day, new Date(2026, 8, 27));
@@ -655,13 +651,14 @@ export default function PlanningPage() {
               })}
             </div>
 
-            <DragOverlay>
+            <DragOverlay dropAnimation={null}>
               {activeDragItem ? (
                 <div
-                  className="rounded-lg px-2 py-0.5 text-[10px] font-semibold text-white shadow-2xl ring-2 ring-white scale-105 pointer-events-none w-fit max-w-full flex flex-col gap-0.5"
+                  className="rounded-lg px-2 py-0.5 text-[10px] font-semibold text-white shadow-2xl ring-2 ring-white scale-105 pointer-events-none w-fit max-w-full flex flex-col gap-0.5 cursor-grabbing"
                   style={{ backgroundColor: activeDragItem.client?.color || '#FF3B00' }}
                 >
                   <div className="flex items-center gap-1 max-w-full">
+                    <GripVertical className="h-2.5 w-2.5 opacity-80 shrink-0" />
                     <span className="font-extrabold truncate max-w-[120px] leading-tight">{activeDragItem.title}</span>
                     <span className="text-[8px] uppercase px-1 rounded-sm bg-black/30 font-mono shrink-0 leading-tight">
                       {activeDragItem.type}
