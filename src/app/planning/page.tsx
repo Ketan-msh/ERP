@@ -75,11 +75,7 @@ function DroppableDayCell({
       className={`min-h-32 p-2 transition-colors relative flex flex-col justify-between group cursor-pointer ${
         isOver ? 'ring-2 ring-[#FF3B00] bg-[#FF3B00]/20 z-20 shadow-lg' : ''
       } ${
-        isCurrentDay
-          ? 'bg-[#FF3B00]/10 ring-2 ring-[#FF3B00] z-10'
-          : isCurrentMonth
-          ? 'bg-card'
-          : 'bg-muted/30 text-muted-foreground/50'
+        isCurrentMonth ? 'bg-card' : 'bg-muted/30 text-muted-foreground/50'
       }`}
     >
       <div className="flex justify-between items-center mb-1 pointer-events-none">
@@ -649,7 +645,7 @@ export default function PlanningPage() {
                   .filter((item) => getItemDateString(item.scheduledDate) === dateId)
                   .sort((a, b) => a.id.localeCompare(b.id));
 
-                const isCurrentDay = isToday(day) || isSameDay(day, new Date(2026, 8, 27));
+                const isCurrentDay = isToday(day);
 
                 return (
                   <DroppableDayCell
