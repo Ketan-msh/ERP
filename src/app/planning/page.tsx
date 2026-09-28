@@ -6,6 +6,8 @@ import {
   format,
   startOfMonth,
   endOfMonth,
+  startOfWeek,
+  endOfWeek,
   eachDayOfInterval,
   isSameMonth,
   isToday,
@@ -51,11 +53,13 @@ import {
 function DroppableDayCell({
   day,
   isCurrentDay,
+  isCurrentMonth,
   onQuickAdd,
   children,
 }: {
   day: Date;
   isCurrentDay: boolean;
+  isCurrentMonth: boolean;
   onQuickAdd: () => void;
   children: React.ReactNode;
 }) {
@@ -68,14 +72,24 @@ function DroppableDayCell({
     <div
       ref={setNodeRef}
       onClick={onQuickAdd}
-      className={`min-h-32 bg-card p-2 transition-colors relative flex flex-col justify-between group cursor-pointer ${
-        isOver ? 'ring-2 ring-[#FF3B00] bg-[#FF3B00]/15 z-20 shadow-lg' : ''
-      } ${isCurrentDay ? 'bg-[#FF3B00]/5 ring-1 ring-[#FF3B00]/50 z-10' : ''}`}
+      className={`min-h-32 p-2 transition-colors relative flex flex-col justify-between group cursor-pointer ${
+        isOver ? 'ring-2 ring-[#FF3B00] bg-[#FF3B00]/20 z-20 shadow-lg' : ''
+      } ${
+        isCurrentDay
+          ? 'bg-[#FF3B00]/10 ring-2 ring-[#FF3B00] z-10'
+          : isCurrentMonth
+          ? 'bg-card'
+          : 'bg-muted/30 text-muted-foreground/50'
+      }`}
     >
       <div className="flex justify-between items-center mb-1 pointer-events-none">
         <span
           className={`text-xs font-bold h-6 w-6 rounded-full flex items-center justify-center ${
-            isCurrentDay ? 'bg-[#FF3B00] text-white' : 'text-foreground/80 font-mono'
+            isCurrentDay
+              ? 'bg-[#FF3B00] text-white'
+              : isCurrentMonth
+              ? 'text-foreground/80 font-mono'
+              : 'text-muted-foreground/40 font-mono'
           }`}
         >
           {format(day, 'd')}
@@ -111,22 +125,24 @@ function DraggableContentCard({ item, onClick }: { item: any; onClick: () => voi
         e.stopPropagation();
         onClick();
       }}
-      className={`rounded-lg px-2 py-0.5 text-[10px] font-semibold text-white shadow-xs cursor-grab active:cursor-grabbing hover:brightness-110 border border-black/20 group/card w-fit max-w-full flex flex-col gap-0.5 select-none transition-opacity ${
-        isDragging ? 'opacity-25 scale-95' : 'opacity-100'
+      className={`rounded-lg px-2 py-1 text-[10px] font-semibold text-white shadow-xs cursor-grab active:cursor-grabbing hover:brightness-110 border border-black/20 group/card w-full flex flex-col gap-0.5 select-none transition-opacity ${
+        isDragging ? 'opacity-20 scale-95' : 'opacity-100'
       }`}
       style={{
         backgroundColor: item.client?.color || '#FF3B00',
       }}
     >
-      <div className="flex items-center gap-1 pointer-events-none max-w-full">
-        <GripVertical className="h-2.5 w-2.5 opacity-60 group-hover/card:opacity-100 shrink-0" />
-        <span className="font-extrabold truncate max-w-[120px] leading-tight">{item.title}</span>
+      <div className="flex items-center justify-between gap-1 pointer-events-none w-full">
+        <div className="flex items-center gap-1 min-w-0 flex-1">
+          <GripVertical className="h-3 w-3 opacity-60 group-hover/card:opacity-100 shrink-0" />
+          <span className="font-extrabold truncate leading-tight">{item.title}</span>
+        </div>
         <span className="text-[8px] uppercase px-1 rounded-sm bg-black/30 font-mono shrink-0 leading-tight">
           {item.type}
         </span>
       </div>
       {item.assignee && (
-        <span className="block text-[8.5px] text-white/85 font-mono truncate pointer-events-none pl-3.5 leading-none">
+        <span className="block text-[8.5px] text-white/85 font-mono truncate pointer-events-none pl-4 leading-none">
           {item.assignee.name}
         </span>
       )}
@@ -447,10 +463,12 @@ export default function PlanningPage() {
     }
   };
 
-  // Calendar dates matrix
-  const daysInMonth = eachDayOfInterval({
-    start: startOfMonth(currentMonth),
-    end: endOfMonth(currentMonth),
+  // Calendar dates matrix (Sunday through Saturday alignment)
+  const monthStart = startOfMonth(currentMonth);
+  const monthEnd = endOfMonth(currentMonth);
+  const daysInCalendar = eachDayOfInterval({
+    start: startOfWeek(monthStart, { weekStartsOn: 0 }),
+    end: endOfWeek(monthEnd, { weekStartsOn: 0 }),
   });
 
   const toggleHideClient = (cId: string) => {
@@ -624,8 +642,9 @@ export default function PlanningPage() {
                 </div>
               ))}
 
-              {daysInMonth.map((day) => {
+              {daysInCalendar.map((day) => {
                 const dateId = format(day, 'yyyy-MM-dd');
+                const isCurrentMonth = isSameMonth(day, currentMonth);
                 const dayItems = filteredContent
                   .filter((item) => getItemDateString(item.scheduledDate) === dateId)
                   .sort((a, b) => a.id.localeCompare(b.id));
@@ -637,6 +656,7 @@ export default function PlanningPage() {
                     key={day.toISOString()}
                     day={day}
                     isCurrentDay={isCurrentDay}
+                    isCurrentMonth={isCurrentMonth}
                     onQuickAdd={() => openQuickAdd('content')}
                   >
                     {dayItems.map((item) => (
