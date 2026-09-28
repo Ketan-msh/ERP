@@ -349,12 +349,11 @@ export default function PlanningPage() {
     setActiveDragItem(null);
 
     if (!over) {
-      console.warn('DnD warning: No droppable target found under drop point');
       return;
     }
 
     const itemId = active.id as string;
-    const targetDateStr = over.id as string; // "YYYY-MM-DD" e.g. "2026-09-15"
+    const targetDateStr = over.id as string; // "YYYY-MM-DD"
 
     const parts = targetDateStr.split('-');
     if (parts.length !== 3) return;
@@ -363,14 +362,15 @@ export default function PlanningPage() {
     const month = parseInt(parts[1], 10) - 1;
     const day = parseInt(parts[2], 10);
 
-    // Create target date at 12:00 PM (noon) local time to eliminate UTC timezone shifts
+    // Set 12:00 PM local time to prevent timezone shift across day boundaries
     const targetDate = new Date(year, month, day, 12, 0, 0);
+    const targetIso = targetDate.toISOString();
 
     // Optimistically update local state immediately
     setContentItems((prev) =>
       prev.map((item) =>
         item.id === itemId
-          ? { ...item, scheduledDate: targetDate.toISOString() }
+          ? { ...item, scheduledDate: targetIso }
           : item
       )
     );
@@ -381,18 +381,17 @@ export default function PlanningPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id: itemId,
-          scheduledDate: targetDate.toISOString(),
+          scheduledDate: targetIso,
         }),
       });
 
       if (res.ok) {
         triggerRefresh();
       } else {
-        console.warn('Drag reschedule save fallback');
         fetchCalendarData();
       }
     } catch (err) {
-      console.warn('Drag reschedule catch fallback:', err);
+      console.warn('Drag reschedule fallback:', err);
       fetchCalendarData();
     }
   };
@@ -627,9 +626,14 @@ export default function PlanningPage() {
               ))}
 
               {daysInMonth.map((day) => {
-                const dayItems = filteredContent.filter((item) =>
-                  isSameDay(new Date(item.scheduledDate), day)
-                );
+                const dateId = format(day, 'yyyy-MM-dd');
+                const dayItems = filteredContent
+                  .filter((item) => {
+                    if (!item.scheduledDate) return false;
+                    return format(new Date(item.scheduledDate), 'yyyy-MM-dd') === dateId;
+                  })
+                  .sort((a, b) => a.id.localeCompare(b.id));
+
                 const isCurrentDay = isToday(day) || isSameDay(day, new Date(2026, 8, 27));
 
                 return (

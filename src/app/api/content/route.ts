@@ -49,7 +49,7 @@ export async function GET(req: Request) {
           },
         },
       },
-      orderBy: { scheduledDate: 'asc' },
+      orderBy: [{ scheduledDate: 'asc' }, { id: 'asc' }],
     });
 
     return NextResponse.json(items);
