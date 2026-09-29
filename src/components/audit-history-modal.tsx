@@ -16,9 +16,12 @@ export function AuditHistoryModal({ isOpen, onClose }: AuditHistoryModalProps) {
   const [undoingId, setUndoingId] = useState<string | null>(null);
 
   const fetchLogs = async () => {
-    setLoading(true);
+    setLogs((prev) => {
+      if (prev.length === 0) setLoading(true);
+      return prev;
+    });
     try {
-      const res = await fetch('/api/activity-log');
+      const res = await fetch('/api/activity-log', { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         setLogs(data);

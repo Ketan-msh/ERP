@@ -157,7 +157,7 @@ function AppStateBridge({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // 2. Real-Time Cross-Device Sync Engine for Vercel Deployments (Polled & Tab-Focus Sync)
+  // 2. Real-Time Sync Engine: sync when tab regains focus or visibility changes
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -170,17 +170,9 @@ function AppStateBridge({ children }: { children: React.ReactNode }) {
     window.addEventListener('focus', handleFocusOrVisibility);
     document.addEventListener('visibilitychange', handleFocusOrVisibility);
 
-    // Sync every 3 seconds for active visible windows across all devices
-    const interval = setInterval(() => {
-      if (document.visibilityState === 'visible') {
-        setRefreshTrigger((prev) => prev + 1);
-      }
-    }, 3000);
-
     return () => {
       window.removeEventListener('focus', handleFocusOrVisibility);
       document.removeEventListener('visibilitychange', handleFocusOrVisibility);
-      clearInterval(interval);
     };
   }, []);
 

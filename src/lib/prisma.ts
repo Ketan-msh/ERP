@@ -2,7 +2,25 @@ import { PrismaClient } from '@prisma/client';
 import fs from 'fs';
 import path from 'path';
 
-// Ensure database path points consistently to prisma/dev.db in the working directory
+// On Vercel / AWS Lambda serverless functions, root filesystem is read-only.
+// Copy SQLite database to /tmp if running in serverless / production environments.
+if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || (process.env.NODE_ENV === 'production' && !process.env.DATABASE_URL?.includes('/tmp'))) {
+  const tmpDbPath = '/tmp/dev.db';
+  if (!fs.existsSync(tmpDbPath)) {
+    const srcDb = path.join(process.cwd(), 'prisma', 'dev.db');
+    if (fs.existsSync(srcDb)) {
+      try {
+        fs.copyFileSync(srcDb, tmpDbPath);
+      } catch (e) {
+        console.error('Failed to copy SQLite database to /tmp:', e);
+      }
+    }
+  }
+  if (fs.existsSync(tmpDbPath)) {
+    process.env.DATABASE_URL = `file:${tmpDbPath}`;
+  }
+}
+
 if (!process.env.DATABASE_URL) {
   const dbPath = path.join(process.cwd(), 'prisma', 'dev.db');
   process.env.DATABASE_URL = `file:${dbPath}`;
