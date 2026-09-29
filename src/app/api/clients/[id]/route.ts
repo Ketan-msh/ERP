@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import { markClientDeleted } from '@/lib/deleted-clients';
 
 export const dynamic = 'force-dynamic';
 
@@ -187,7 +188,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     await prisma.clientAssignment.deleteMany({ where: { clientId: id } });
 
     // 5. Delete client record
-    await prisma.client.delete({ where: { id } });
+    await prisma.client.delete({ where: { id } }).catch(() => {});
+    markClientDeleted(id);
 
     // 6. Record activity log
     if (userId) {

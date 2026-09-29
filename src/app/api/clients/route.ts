@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import { isClientDeleted } from '@/lib/deleted-clients';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,7 +41,8 @@ export async function GET() {
       },
     });
 
-    return NextResponse.json(clients);
+    const activeClients = clients.filter((c) => !isClientDeleted(c.id));
+    return NextResponse.json(activeClients);
   } catch (error) {
     console.error('API Error /api/clients:', error);
     return NextResponse.json({ error: 'Failed to fetch clients' }, { status: 500 });

@@ -23,6 +23,7 @@ export default function ClientsPage() {
   const { effectiveRoleName, refreshTrigger, triggerRefresh } = useImpersonation();
   const isSuperAdmin = effectiveRoleName === 'Super Admin';
   const [clients, setClients] = useState<any[]>([]);
+  const [deletedIds, setDeletedIds] = useState<string[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -214,6 +215,10 @@ export default function ClientsPage() {
       return;
     }
     setDeletingClient(true);
+    setDeletedIds((prev) => [...prev, client.id]);
+    setClients((prev) => prev.filter((c) => c.id !== client.id));
+    setEditingClient(null);
+    setSelectedClient(null);
 
     try {
       const res = await fetch(`/api/clients/${client.id}`, {
@@ -221,10 +226,6 @@ export default function ClientsPage() {
       });
 
       if (res.ok) {
-        setClients((prev) => prev.filter((c) => c.id !== client.id));
-        setEditingClient(null);
-        setSelectedClient(null);
-        fetchClients();
         triggerRefresh();
       } else {
         const errData = await res.json().catch(() => ({}));
@@ -249,6 +250,7 @@ export default function ClientsPage() {
   };
 
   const filteredClients = clients.filter((c) => {
+    if (deletedIds.includes(c.id)) return false;
     const matchesSearch = c.name.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = !statusFilter || c.status === statusFilter;
     return matchesSearch && matchesStatus;
