@@ -78,7 +78,7 @@ export default function ClientsPage() {
       if (prev.length === 0) setLoading(true);
       return prev;
     });
-    fetch('/api/clients')
+    fetch('/api/clients', { cache: 'no-store' })
       .then((res) => (res.ok ? res.json() : []))
       .then((data) => {
         if (Array.isArray(data)) setClients(data);
@@ -89,7 +89,7 @@ export default function ClientsPage() {
         setLoading(false);
       });
 
-    fetch('/api/users')
+    fetch('/api/users', { cache: 'no-store' })
       .then((res) => (res.ok ? res.json() : []))
       .then((data) => {
         if (Array.isArray(data)) setUsers(data);
@@ -135,6 +135,8 @@ export default function ClientsPage() {
       });
 
       if (res.ok) {
+        const created = await res.json();
+        setClients((prev) => [created, ...prev.filter((c) => c.id !== created.id)]);
         setShowAddModal(false);
         setName('');
         setAssignedUserIds([]);
