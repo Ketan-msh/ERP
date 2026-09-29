@@ -394,7 +394,7 @@ export default function PlanningPage() {
     );
 
     try {
-      await fetch('/api/content', {
+      const res = await fetch('/api/content', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -402,6 +402,9 @@ export default function PlanningPage() {
           scheduledDate: targetIso,
         }),
       });
+      if (res.ok) {
+        triggerRefresh();
+      }
     } catch (err) {
       console.warn('Drag reschedule API error:', err);
     }

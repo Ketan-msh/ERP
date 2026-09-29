@@ -126,7 +126,63 @@ function AppStateBridge({ children }: { children: React.ReactNode }) {
   const [quickAddType, setQuickAddType] = useState<'content' | 'task' | 'shoot'>('content');
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  const triggerRefresh = () => setRefreshTrigger((prev) => prev + 1);
+  const syncChannelRef = React.useRef<BroadcastChannel | null>(null);
+
+  // 1. Instant Same-Device Cross-Tab Broadcast Channel Sync
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      const channel = new BroadcastChannel('trexobyte_realtime_sync');
+      syncChannelRef.current = channel;
+
+      channel.onmessage = (event) => {
+        if (event.data?.type === 'REFRESH') {
+          setRefreshTrigger((prev) => prev + 1);
+        }
+      };
+
+      return () => {
+        channel.close();
+      };
+    }
+  }, []);
+
+  const triggerRefresh = () => {
+    setRefreshTrigger((prev) => prev + 1);
+    if (syncChannelRef.current) {
+      try {
+        syncChannelRef.current.postMessage({ type: 'REFRESH', timestamp: Date.now() });
+      } catch (e) {
+        // ignore
+      }
+    }
+  };
+
+  // 2. Real-Time Cross-Device Sync Engine for Vercel Deployments (Polled & Tab-Focus Sync)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleFocusOrVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        setRefreshTrigger((prev) => prev + 1);
+      }
+    };
+
+    window.addEventListener('focus', handleFocusOrVisibility);
+    document.addEventListener('visibilitychange', handleFocusOrVisibility);
+
+    // Sync every 3 seconds for active visible windows across all devices
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        setRefreshTrigger((prev) => prev + 1);
+      }
+    }, 3000);
+
+    return () => {
+      window.removeEventListener('focus', handleFocusOrVisibility);
+      document.removeEventListener('visibilitychange', handleFocusOrVisibility);
+      clearInterval(interval);
+    };
+  }, []);
 
   const userRole = (session?.user as any)?.roleName || 'Super Admin';
   const rawPerms = (session?.user as any)?.permissions;
