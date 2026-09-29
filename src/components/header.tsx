@@ -13,7 +13,9 @@ import {
   ChevronDown,
   Sparkles,
   ShieldAlert,
+  History,
 } from 'lucide-react';
+import { AuditHistoryModal } from '@/components/audit-history-modal';
 
 export function Header() {
   const { data: session } = useSession();
@@ -29,6 +31,7 @@ export function Header() {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearchModal, setShowSearchModal] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
 
   const rolesList = [
     'Super Admin',
@@ -118,6 +121,16 @@ export function Header() {
           </div>
         )}
 
+        {/* Changes Made / Audit History Button */}
+        <button
+          onClick={() => setShowHistoryModal(true)}
+          className="flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-muted hover:border-[#FF3B00]/40 transition-all"
+          title="View Edit History & Changes Made (Google Docs style Undo)"
+        >
+          <History className="h-4 w-4 text-[#FF3B00]" />
+          <span className="hidden md:inline">Changes Made</span>
+        </button>
+
         {/* Theme Toggle */}
         <button
           onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
@@ -171,6 +184,12 @@ export function Header() {
             </div>
           )}
         </div>
+
+        {/* Audit History & Rollback Modal */}
+        <AuditHistoryModal
+          isOpen={showHistoryModal}
+          onClose={() => setShowHistoryModal(false)}
+        />
       </div>
     </header>
   );

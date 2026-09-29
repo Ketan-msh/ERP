@@ -74,7 +74,10 @@ export default function ClientsPage() {
   }, [showAddModal, editingClient, selectedClient]);
 
   const fetchClients = () => {
-    setLoading(true);
+    setClients((prev) => {
+      if (prev.length === 0) setLoading(true);
+      return prev;
+    });
     fetch('/api/clients')
       .then((res) => (res.ok ? res.json() : []))
       .then((data) => {
@@ -216,6 +219,7 @@ export default function ClientsPage() {
       });
 
       if (res.ok) {
+        setClients((prev) => prev.filter((c) => c.id !== client.id));
         setEditingClient(null);
         setSelectedClient(null);
         fetchClients();

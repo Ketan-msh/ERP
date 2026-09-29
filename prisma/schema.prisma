@@ -152,12 +152,13 @@ model Payment {
 }
 
 model ActivityLog {
-  id         String   @id @default(cuid())
-  userId     String?
-  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  action     String   // "CREATE", "UPDATE", "DELETE", "APPROVAL", "STATUS_CHANGE"
-  entityType String   // "ContentItem", "Task", "Invoice", "User", "Client"
-  entityId   String?
-  details    String   // Description or JSON
-  createdAt  DateTime @default(now())
+  id            String   @id @default(cuid())
+  userId        String?
+  user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action        String   // "CREATE", "UPDATE", "DELETE", "APPROVAL", "STATUS_CHANGE", "UNDO"
+  entityType    String   // "ContentItem", "Task", "Invoice", "User", "Client"
+  entityId      String?
+  details       String   // Description or JSON
+  previousState String?  // Snapshot JSON for undo / rollback
+  createdAt     DateTime @default(now())
 }
