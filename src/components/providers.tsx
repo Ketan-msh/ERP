@@ -132,11 +132,14 @@ function AppStateBridge({ children }: { children: React.ReactNode }) {
   const rawPerms = (session?.user as any)?.permissions;
 
   const actualPermissions = parsePermissions(rawPerms);
+  const hasActualPermissions = Object.keys(actualPermissions).length > 0;
 
   const effectiveRoleName = impersonatedRoleName || userRole;
   const effectivePermissions = impersonatedRoleName
-    ? ROLE_PERMISSIONS_PRESETS[impersonatedRoleName] || actualPermissions
-    : actualPermissions;
+    ? ROLE_PERMISSIONS_PRESETS[impersonatedRoleName] || ROLE_PERMISSIONS_PRESETS['Super Admin']
+    : hasActualPermissions
+    ? actualPermissions
+    : ROLE_PERMISSIONS_PRESETS[effectiveRoleName] || ROLE_PERMISSIONS_PRESETS['Super Admin'];
 
   const openQuickAdd = (type: 'content' | 'task' | 'shoot' = 'content') => {
     setQuickAddType(type);
