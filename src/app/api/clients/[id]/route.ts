@@ -154,27 +154,42 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     });
     if (!client) return NextResponse.json({ error: 'Client not found' }, { status: 404 });
 
-    // Cleanly delete dependent records to prevent SQLite foreign key constraint errors
-    await prisma.clientAssignment.deleteMany({ where: { clientId: id } });
+    // 1. Find all content items belonging to this client
+    const contentItems = await prisma.contentItem.findMany({
+      where: { clientId: id },
+      select: { id: true },
+    });
+    const contentIds = contentItems.map((c) => c.id);
 
-    const invoices = await prisma.invoice.findMany({ where: { clientId: id }, select: { id: true } });
+    // 2. Delete all tasks associated with this client or its content items
+    await prisma.task.deleteMany({
+      where: {
+        OR: [
+          { clientId: id },
+          ...(contentIds.length > 0 ? [{ contentItemId: { in: contentIds } }] : []),
+        ],
+      },
+    });
+
+    // 3. Delete payments and invoices
+    const invoices = await prisma.invoice.findMany({
+      where: { clientId: id },
+      select: { id: true },
+    });
     const invoiceIds = invoices.map((i) => i.id);
     if (invoiceIds.length > 0) {
       await prisma.payment.deleteMany({ where: { invoiceId: { in: invoiceIds } } });
-      await prisma.invoice.deleteMany({ where: { clientId: id } });
     }
+    await prisma.invoice.deleteMany({ where: { clientId: id } });
 
-    const contentItems = await prisma.contentItem.findMany({ where: { clientId: id }, select: { id: true } });
-    const contentIds = contentItems.map((c) => c.id);
-    if (contentIds.length > 0) {
-      await prisma.task.updateMany({ where: { contentItemId: { in: contentIds } }, data: { contentItemId: null } });
-      await prisma.contentItem.deleteMany({ where: { clientId: id } });
-    }
+    // 4. Delete content items and client assignments
+    await prisma.contentItem.deleteMany({ where: { clientId: id } });
+    await prisma.clientAssignment.deleteMany({ where: { clientId: id } });
 
-    await prisma.task.updateMany({ where: { clientId: id }, data: { clientId: null } });
-
+    // 5. Delete client record
     await prisma.client.delete({ where: { id } });
 
+    // 6. Record activity log
     if (userId) {
       await prisma.activityLog.create({
         data: {
@@ -189,8 +204,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     }
 
     return NextResponse.json({ success: true });
-  } catch (error) {
+  } catch (error: any) {
     console.error('API Error DELETE /api/clients/[id]:', error);
-    return NextResponse.json({ error: 'Failed to delete client' }, { status: 500 });
+    return NextResponse.json({ error: error?.message || 'Failed to delete client account' }, { status: 500 });
   }
 }
