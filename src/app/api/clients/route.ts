@@ -9,6 +9,9 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   try {
     const clients = await prisma.client.findMany({
+      where: {
+        deletedAt: null,
+      },
       include: {
         assignedTeam: {
           include: {
@@ -41,8 +44,7 @@ export async function GET() {
       },
     });
 
-    const activeClients = clients.filter((c) => !isClientDeleted(c.id));
-    return NextResponse.json(activeClients);
+    return NextResponse.json(clients);
   } catch (error) {
     console.error('API Error /api/clients:', error);
     return NextResponse.json({ error: 'Failed to fetch clients' }, { status: 500 });

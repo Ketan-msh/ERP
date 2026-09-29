@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import { unmarkClientDeleted } from '@/lib/deleted-clients';
 
 export async function POST(req: Request) {
   try {
@@ -29,13 +30,17 @@ export async function POST(req: Request) {
     }
 
     const snapshot = JSON.parse(log.previousState);
+    let actionType = 'RESTORE';
 
-    // UNDO: Client Update or Delete
+    // UNDO / RESTORE: Client Update or Delete
     if (log.entityType === 'Client') {
+      const clientId = log.entityId || snapshot.id;
+
       if (log.action === 'UPDATE') {
-        const { id, name, logo, color, servicePackage, packageTier, status, monthlyRetainer, billingCycleDay } = snapshot;
+        actionType = 'UNDO';
+        const { name, logo, color, servicePackage, packageTier, status, monthlyRetainer, billingCycleDay } = snapshot;
         await prisma.client.update({
-          where: { id: log.entityId || id },
+          where: { id: clientId },
           data: {
             name,
             logo,
@@ -48,22 +53,32 @@ export async function POST(req: Request) {
           },
         });
       } else if (log.action === 'DELETE') {
-        const { id, name, logo, color, servicePackage, packageTier, status, monthlyRetainer, billingCycleDay, startDate } = snapshot;
-        // Re-create the deleted client
-        await prisma.client.create({
-          data: {
-            id,
-            name,
-            logo: logo || null,
-            color: color || '#FF3B00',
-            servicePackage: servicePackage || 'Social & Growth',
-            packageTier: packageTier || 'Standard',
-            status: status || 'ACTIVE',
-            monthlyRetainer: monthlyRetainer || 0,
-            billingCycleDay: billingCycleDay || 1,
-            startDate: startDate ? new Date(startDate) : new Date(),
-          },
+        actionType = 'RESTORE';
+        // Restore soft-deleted client
+        await prisma.client.update({
+          where: { id: clientId },
+          data: { deletedAt: null },
+        }).catch(async () => {
+          // Fallback: re-create client if record was hard-deleted
+          const { id, name, logo, color, servicePackage, packageTier, status, monthlyRetainer, billingCycleDay, startDate } = snapshot;
+          await prisma.client.create({
+            data: {
+              id,
+              name,
+              logo: logo || null,
+              color: color || '#FF3B00',
+              servicePackage: servicePackage || 'Social & Growth',
+              packageTier: packageTier || 'Standard',
+              status: status || 'ACTIVE',
+              monthlyRetainer: monthlyRetainer || 0,
+              billingCycleDay: billingCycleDay || 1,
+              startDate: startDate ? new Date(startDate) : new Date(),
+              deletedAt: null,
+            },
+          });
         });
+
+        unmarkClientDeleted(clientId);
       }
     } else if (log.entityType === 'Task') {
       if (log.entityId && snapshot) {

@@ -109,17 +109,29 @@ export function AuditHistoryModal({ isOpen, onClose }: AuditHistoryModalProps) {
           ) : (
             logs.map((log) => {
               const hasUndo = Boolean(log.previousState);
+              let diffs: { field: string; oldVal: string; newVal: string }[] = [];
+              if (log.changes) {
+                try {
+                  diffs = JSON.parse(log.changes);
+                } catch (e) {
+                  // ignore
+                }
+              }
+
               const actionColors: Record<string, string> = {
                 CREATE: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30',
                 UPDATE: 'bg-blue-500/10 text-blue-500 border-blue-500/30',
                 DELETE: 'bg-rose-500/10 text-rose-500 border-rose-500/30',
+                RESTORE: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30',
                 UNDO: 'bg-purple-500/10 text-purple-500 border-purple-500/30',
               };
+
+              const isDelete = log.action === 'DELETE';
 
               return (
                 <div
                   key={log.id}
-                  className="p-3 rounded-lg border border-border bg-muted/20 hover:bg-muted/40 transition-all flex items-center justify-between text-xs gap-3"
+                  className="p-3.5 rounded-lg border border-border bg-card hover:bg-muted/30 transition-all flex flex-col sm:flex-row sm:items-center justify-between text-xs gap-3 shadow-xs"
                 >
                   <div className="flex items-start gap-3 flex-1 min-w-0">
                     <div className="h-8 w-8 rounded-full bg-background border border-border flex items-center justify-center font-bold text-foreground text-xs flex-shrink-0 mt-0.5">
@@ -133,8 +145,8 @@ export function AuditHistoryModal({ isOpen, onClose }: AuditHistoryModalProps) {
                         log.user?.name?.slice(0, 2).toUpperCase() || 'EX'
                       )}
                     </div>
-                    <div className="space-y-0.5 truncate">
-                      <div className="flex items-center gap-2">
+                    <div className="space-y-1 flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-foreground">{log.user?.name || 'User'}</span>
                         <span
                           className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${
@@ -148,20 +160,38 @@ export function AuditHistoryModal({ isOpen, onClose }: AuditHistoryModalProps) {
                           {new Date(log.createdAt).toLocaleString()}
                         </span>
                       </div>
-                      <p className="text-xs text-foreground/90 font-medium truncate">{log.details}</p>
+                      <p className="text-xs text-foreground font-semibold">{log.details}</p>
+
+                      {/* Field Diff Breakdown */}
+                      {diffs.length > 0 && (
+                        <div className="mt-2 space-y-1 p-2 rounded-md bg-muted/40 border border-border/60 text-[11px] font-mono">
+                          {diffs.map((d, idx) => (
+                            <div key={idx} className="flex items-center gap-1.5 text-muted-foreground">
+                              <span className="font-bold text-foreground">{d.field}:</span>
+                              <span className="line-through text-rose-400">{d.oldVal}</span>
+                              <span>→</span>
+                              <span className="font-bold text-emerald-400">{d.newVal}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
 
-                  {/* Undo Button if previousState snapshot is available */}
-                  {hasUndo && log.action !== 'UNDO' && (
+                  {/* Undo / Restore Button if previousState snapshot is available */}
+                  {hasUndo && log.action !== 'UNDO' && log.action !== 'RESTORE' && (
                     <button
                       onClick={() => handleUndo(log.id)}
                       disabled={undoingId === log.id}
-                      className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#FF3B00]/10 hover:bg-[#FF3B00] text-[#FF3B00] hover:text-white border border-[#FF3B00]/30 font-bold text-xs transition-all flex-shrink-0 clicky-btn"
-                      title="Revert this change back to previous state"
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border font-bold text-xs transition-all flex-shrink-0 clicky-btn ${
+                        isDelete
+                          ? 'bg-emerald-500/10 hover:bg-emerald-500 text-emerald-500 hover:text-white border-emerald-500/30'
+                          : 'bg-[#FF3B00]/10 hover:bg-[#FF3B00] text-[#FF3B00] hover:text-white border-[#FF3B00]/30'
+                      }`}
+                      title={isDelete ? 'Restore deleted client account back to active roster' : 'Revert this change back to previous value'}
                     >
                       <RotateCcw className={`h-3.5 w-3.5 ${undoingId === log.id ? 'animate-spin' : ''}`} />
-                      <span>{undoingId === log.id ? 'Undoing...' : 'Undo'}</span>
+                      <span>{undoingId === log.id ? 'Processing...' : isDelete ? 'Restore Account' : 'Undo Edit'}</span>
                     </button>
                   )}
                 </div>

@@ -56,6 +56,7 @@ model Client {
   monthlyRetainer Float              // In NPR
   startDate       DateTime
   billingCycleDay Int                @default(1) // 1-31
+  deletedAt       DateTime?          // Soft delete timestamp for permanent persistence and restore capability
 
   assignedTeam    ClientAssignment[]
   contentItems    ContentItem[]
@@ -155,10 +156,11 @@ model ActivityLog {
   id            String   @id @default(cuid())
   userId        String?
   user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  action        String   // "CREATE", "UPDATE", "DELETE", "APPROVAL", "STATUS_CHANGE", "UNDO"
+  action        String   // "CREATE", "UPDATE", "DELETE", "RESTORE", "UNDO"
   entityType    String   // "ContentItem", "Task", "Invoice", "User", "Client"
   entityId      String?
-  details       String   // Description or JSON
+  details       String   // Human-readable summary
+  changes       String?  // JSON string array of diffs: [{ field, oldVal, newVal }]
   previousState String?  // Snapshot JSON for undo / rollback
   createdAt     DateTime @default(now())
 }

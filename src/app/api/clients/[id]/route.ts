@@ -99,10 +99,35 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       });
     }
 
+    // Calculate field diffs for Activity History
+    const diffs: { field: string; oldVal: string; newVal: string }[] = [];
+    if (name && name.trim() !== existingClient.name) {
+      diffs.push({ field: 'Client Name', oldVal: existingClient.name, newVal: name.trim() });
+    }
+    if (servicePackage && servicePackage !== existingClient.servicePackage) {
+      diffs.push({ field: 'Service Package', oldVal: existingClient.servicePackage, newVal: servicePackage });
+    }
+    if (packageTier && packageTier !== existingClient.packageTier) {
+      diffs.push({ field: 'Package Tier', oldVal: existingClient.packageTier, newVal: packageTier });
+    }
+    if (status && status !== existingClient.status) {
+      diffs.push({ field: 'Account Status', oldVal: existingClient.status, newVal: status });
+    }
+    if (monthlyRetainer !== undefined && parseFloat(monthlyRetainer) !== existingClient.monthlyRetainer) {
+      diffs.push({
+        field: 'Monthly Retainer',
+        oldVal: `NPR ${existingClient.monthlyRetainer.toLocaleString()}`,
+        newVal: `NPR ${parseFloat(monthlyRetainer).toLocaleString()}`,
+      });
+    }
+    if (billingCycleDay !== undefined && parseInt(billingCycleDay) !== existingClient.billingCycleDay) {
+      diffs.push({ field: 'Billing Cycle Day', oldVal: `Day ${existingClient.billingCycleDay}`, newVal: `Day ${billingCycleDay}` });
+    }
+
     const updated = await prisma.client.update({
       where: { id },
       data: {
-        ...(name && { name }),
+        ...(name && { name: name.trim() }),
         ...(logo !== undefined && { logo }),
         ...(color && { color }),
         ...(servicePackage && { servicePackage }),
@@ -127,6 +152,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           entityType: 'Client',
           entityId: id,
           details: `Updated client account: ${updated.name}`,
+          changes: JSON.stringify(diffs),
           previousState: JSON.stringify(existingClient),
         },
       });
@@ -155,43 +181,14 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     });
     if (!client) return NextResponse.json({ error: 'Client not found' }, { status: 404 });
 
-    // 1. Find all content items belonging to this client
-    const contentItems = await prisma.contentItem.findMany({
-      where: { clientId: id },
-      select: { id: true },
+    // Perform DB soft delete
+    await prisma.client.update({
+      where: { id },
+      data: { deletedAt: new Date() },
     });
-    const contentIds = contentItems.map((c) => c.id);
-
-    // 2. Delete all tasks associated with this client or its content items
-    await prisma.task.deleteMany({
-      where: {
-        OR: [
-          { clientId: id },
-          ...(contentIds.length > 0 ? [{ contentItemId: { in: contentIds } }] : []),
-        ],
-      },
-    });
-
-    // 3. Delete payments and invoices
-    const invoices = await prisma.invoice.findMany({
-      where: { clientId: id },
-      select: { id: true },
-    });
-    const invoiceIds = invoices.map((i) => i.id);
-    if (invoiceIds.length > 0) {
-      await prisma.payment.deleteMany({ where: { invoiceId: { in: invoiceIds } } });
-    }
-    await prisma.invoice.deleteMany({ where: { clientId: id } });
-
-    // 4. Delete content items and client assignments
-    await prisma.contentItem.deleteMany({ where: { clientId: id } });
-    await prisma.clientAssignment.deleteMany({ where: { clientId: id } });
-
-    // 5. Delete client record
-    await prisma.client.delete({ where: { id } }).catch(() => {});
     markClientDeleted(id);
 
-    // 6. Record activity log
+    // Record Activity Log with diff
     if (userId) {
       await prisma.activityLog.create({
         data: {
@@ -200,6 +197,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
           entityType: 'Client',
           entityId: id,
           details: `Deleted client account: ${client.name}`,
+          changes: JSON.stringify([{ field: 'Account Status', oldVal: client.status, newVal: 'DELETED' }]),
           previousState: JSON.stringify(client),
         },
       });
