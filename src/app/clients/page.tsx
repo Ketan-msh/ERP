@@ -15,6 +15,8 @@ import {
   ChevronRight,
   Send,
   X,
+  Edit2,
+  Trash2,
 } from 'lucide-react';
 
 export default function ClientsPage() {
@@ -40,21 +42,36 @@ export default function ClientsPage() {
   const [assignedUserIds, setAssignedUserIds] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
+  // Edit Client Modal State
+  const [editingClient, setEditingClient] = useState<any | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editColor, setEditColor] = useState('#FF3B00');
+  const [editServicePackage, setEditServicePackage] = useState('Social & Growth');
+  const [editPackageTier, setEditPackageTier] = useState('Standard');
+  const [editStatus, setEditStatus] = useState('ACTIVE');
+  const [editMonthlyRetainer, setEditMonthlyRetainer] = useState('100000');
+  const [editBillingCycleDay, setEditBillingCycleDay] = useState('1');
+  const [editAssignedUserIds, setEditAssignedUserIds] = useState<string[]>([]);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [deletingClient, setDeletingClient] = useState(false);
+
   // Detail Client Drawer/Modal
   const [selectedClient, setSelectedClient] = useState<any | null>(null);
   const [activeTab, setActiveTab] = useState<'content' | 'billing' | 'comms'>('content');
   const [commNote, setCommNote] = useState('');
+
   // Listen to Escape key to close modals
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         if (showAddModal) setShowAddModal(false);
+        if (editingClient) setEditingClient(null);
         if (selectedClient) setSelectedClient(null);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showAddModal, selectedClient]);
+  }, [showAddModal, editingClient, selectedClient]);
 
   const fetchClients = () => {
     setLoading(true);
@@ -129,6 +146,89 @@ export default function ClientsPage() {
       alert('An unexpected error occurred while creating the client account.');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleOpenEditClient = (client: any, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setEditingClient(client);
+    setEditName(client.name || '');
+    setEditColor(client.color || '#FF3B00');
+    setEditServicePackage(client.servicePackage || 'Social & Growth');
+    setEditPackageTier(client.packageTier || 'Standard');
+    setEditStatus(client.status || 'ACTIVE');
+    setEditMonthlyRetainer(client.monthlyRetainer?.toString() || '100000');
+    setEditBillingCycleDay(client.billingCycleDay?.toString() || '1');
+    setEditAssignedUserIds(
+      client.assignedTeam?.map((ast: any) => ast.userId || ast.user?.id).filter(Boolean) || []
+    );
+  };
+
+  const handleSaveClientEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingClient || !editName.trim()) return;
+    setSavingEdit(true);
+
+    try {
+      const res = await fetch(`/api/clients/${editingClient.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editName.trim(),
+          color: editColor,
+          servicePackage: editServicePackage,
+          packageTier: editPackageTier,
+          status: editStatus,
+          monthlyRetainer: editMonthlyRetainer,
+          billingCycleDay: editBillingCycleDay,
+          assignedUserIds: editAssignedUserIds,
+        }),
+      });
+
+      if (res.ok) {
+        setEditingClient(null);
+        setSelectedClient(null);
+        fetchClients();
+        triggerRefresh();
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert(errData.error || 'Failed to update client account.');
+      }
+    } catch (err) {
+      console.error('Update client failed:', err);
+      alert('An unexpected error occurred while updating the client account.');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const handleDeleteClient = async (client: any, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!client) return;
+    if (!confirm(`Are you sure you want to permanently delete "${client.name}"? This action cannot be undone.`)) {
+      return;
+    }
+    setDeletingClient(true);
+
+    try {
+      const res = await fetch(`/api/clients/${client.id}`, {
+        method: 'DELETE',
+      });
+
+      if (res.ok) {
+        setEditingClient(null);
+        setSelectedClient(null);
+        fetchClients();
+        triggerRefresh();
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert(errData.error || 'Failed to delete client account.');
+      }
+    } catch (err) {
+      console.error('Delete client failed:', err);
+      alert('An unexpected error occurred while deleting the client account.');
+    } finally {
+      setDeletingClient(false);
     }
   };
 
@@ -270,8 +370,27 @@ export default function ClientsPage() {
               </div>
 
               <div className="mt-4 pt-3 border-t border-border flex items-center justify-between text-xs font-mono text-[#FF3B00] font-bold">
-                <span>View Full Account Profile</span>
-                <ChevronRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                <span className="flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+                  View Profile <ChevronRight className="h-4 w-4" />
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={(e) => handleOpenEditClient(client, e)}
+                    className="p-1.5 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                    title="Edit Client"
+                  >
+                    <Edit2 className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => handleDeleteClient(client, e)}
+                    className="p-1.5 rounded-md text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors"
+                    title="Delete Client"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
             </div>
           ))}
@@ -437,7 +556,194 @@ export default function ClientsPage() {
         </div>
       )}
 
-      {/* CLIENT PROFILE DRAWER / MODAL */}
+      {/* EDIT CLIENT MODAL */}
+      {editingClient && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setEditingClient(null);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 animate-in fade-in duration-200"
+        >
+          <div className="w-full max-w-lg bg-card border-2 border-border shadow-2xl rounded-xl p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b border-border pb-3">
+              <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
+                <Edit2 className="h-5 w-5 text-[#FF3B00]" /> Edit Client Account
+              </h2>
+              <button
+                onClick={() => setEditingClient(null)}
+                className="p-1 rounded text-muted-foreground hover:bg-muted"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveClientEdit} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                  Client Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Kathmandu Coffee Co."
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:border-[#FF3B00] outline-hidden"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                    Brand Color Code
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="color"
+                      value={editColor}
+                      onChange={(e) => setEditColor(e.target.value)}
+                      className="h-9 w-12 rounded border border-input p-0.5 bg-background cursor-pointer"
+                    />
+                    <input
+                      type="text"
+                      value={editColor}
+                      onChange={(e) => setEditColor(e.target.value)}
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:border-[#FF3B00] outline-hidden font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                    Account Status
+                  </label>
+                  <select
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value)}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:border-[#FF3B00] outline-hidden"
+                  >
+                    <option value="ACTIVE">ACTIVE</option>
+                    <option value="PAUSED">PAUSED</option>
+                    <option value="OFFBOARDED">OFFBOARDED</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                    Service Package
+                  </label>
+                  <select
+                    value={editServicePackage}
+                    onChange={(e) => setEditServicePackage(e.target.value)}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:border-[#FF3B00] outline-hidden"
+                  >
+                    <option value="Social & Growth">Social & Growth</option>
+                    <option value="Production & Films">Production & Films</option>
+                    <option value="Full 360 Marketing">Full 360 Marketing</option>
+                    <option value="PR & Influencer">PR & Influencer</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                    Package Tier
+                  </label>
+                  <select
+                    value={editPackageTier}
+                    onChange={(e) => setEditPackageTier(e.target.value)}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:border-[#FF3B00] outline-hidden"
+                  >
+                    <option value="Starter">Starter</option>
+                    <option value="Standard">Standard</option>
+                    <option value="Premium VIP">Premium VIP</option>
+                    <option value="Custom Enterprise">Custom Enterprise</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                    Monthly Retainer (NPR)
+                  </label>
+                  <input
+                    type="number"
+                    value={editMonthlyRetainer}
+                    onChange={(e) => setEditMonthlyRetainer(e.target.value)}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:border-[#FF3B00] outline-hidden"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                    Billing Cycle Day
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={31}
+                    value={editBillingCycleDay}
+                    onChange={(e) => setEditBillingCycleDay(e.target.value)}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:border-[#FF3B00] outline-hidden"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                  Assign Team Members
+                </label>
+                <div className="grid grid-cols-2 gap-2 border border-border p-2 rounded-md max-h-32 overflow-y-auto">
+                  {users.map((u) => (
+                    <label key={u.id} className="flex items-center gap-2 cursor-pointer text-xs">
+                      <input
+                        type="checkbox"
+                        checked={editAssignedUserIds.includes(u.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) setEditAssignedUserIds([...editAssignedUserIds, u.id]);
+                          else setEditAssignedUserIds(editAssignedUserIds.filter((id) => id !== u.id));
+                        }}
+                        className="rounded border-input text-[#FF3B00] focus:ring-[#FF3B00]"
+                      />
+                      <span>{u.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex justify-between items-center pt-2 border-t border-border">
+                <button
+                  type="button"
+                  onClick={() => handleDeleteClient(editingClient)}
+                  disabled={deletingClient}
+                  className="px-3 py-1.5 text-xs font-bold rounded-md bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 flex items-center gap-1 transition-all"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span>Delete Client</span>
+                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingClient(null)}
+                    className="px-4 py-2 font-semibold rounded-md border border-input hover:bg-muted"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingEdit}
+                    className="px-5 py-2 font-bold rounded-md bg-[#FF3B00] text-white hover:bg-[#e03400] clicky-btn"
+                  >
+                    {savingEdit ? 'Saving...' : 'Save Changes'}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
       {selectedClient && (
         <div
           onClick={(e) => {
@@ -466,12 +772,30 @@ export default function ClientsPage() {
                   </div>
                 </div>
               </div>
-              <button
-                onClick={() => setSelectedClient(null)}
-                className="p-1 rounded text-muted-foreground hover:bg-muted"
-              >
-                <X className="h-6 w-6" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleOpenEditClient(selectedClient)}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-border bg-muted/40 hover:bg-muted font-bold text-xs text-foreground transition-all"
+                  title="Edit Client"
+                >
+                  <Edit2 className="h-4 w-4 text-[#FF3B00]" />
+                  <span>Edit</span>
+                </button>
+                <button
+                  onClick={() => handleDeleteClient(selectedClient)}
+                  disabled={deletingClient}
+                  className="p-1.5 rounded-lg border border-rose-500/20 text-rose-500 hover:bg-rose-500/10 transition-all"
+                  title="Delete Client"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => setSelectedClient(null)}
+                  className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
             </div>
 
             {/* Profile Navigation Tabs */}
