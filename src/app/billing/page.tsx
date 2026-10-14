@@ -16,6 +16,7 @@ import {
   CreditCard,
   Building2,
   X,
+  Trash2,
 } from 'lucide-react';
 import {
   BarChart,
@@ -53,6 +54,10 @@ export default function BillingPage() {
   const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentNotesInput, setPaymentNotesInput] = useState('');
+
+  // Delete Invoice Modal State
+  const [invoiceToDelete, setInvoiceToDelete] = useState<any | null>(null);
+  const [deletingInvoice, setDeletingInvoice] = useState(false);
   // Listen to Escape key to close modals
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -125,7 +130,15 @@ export default function BillingPage() {
 
   const handleCreateInvoice = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!clientId || !amount) return;
+    const selectedClientId = clientId || (clients.length > 0 ? clients[0].id : '');
+    if (!selectedClientId) {
+      alert('Please select or create a Client Account first.');
+      return;
+    }
+    if (!amount || parseFloat(amount) <= 0) {
+      alert('Please enter a valid invoice amount greater than 0.');
+      return;
+    }
     setSubmitting(true);
 
     try {
@@ -133,7 +146,7 @@ export default function BillingPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          clientId,
+          clientId: selectedClientId,
           invoiceNumber,
           amount,
           issueDate,
@@ -145,20 +158,57 @@ export default function BillingPage() {
       });
 
       if (res.ok) {
+        const newInv = await res.json();
+        setInvoices((prev) => [newInv, ...prev]);
         setShowCreateModal(false);
+        setInvoiceNumber(`TB-2026-00${Math.floor(Math.random() * 90 + 10)}`);
         fetchBillingData();
         triggerRefresh();
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        alert(errorData.error || 'Failed to create invoice.');
       }
     } catch (e) {
       console.error('Create invoice error:', e);
+      alert('An unexpected error occurred while generating the invoice.');
     } finally {
       setSubmitting(false);
     }
   };
 
+  const handleConfirmDeleteInvoice = async () => {
+    if (!invoiceToDelete) return;
+    const target = invoiceToDelete;
+    setDeletingInvoice(true);
+
+    try {
+      const res = await fetch(`/api/invoices?id=${target.id}`, {
+        method: 'DELETE',
+      });
+
+      if (res.ok) {
+        setInvoices((prev) => prev.filter((i) => i.id !== target.id));
+        setInvoiceToDelete(null);
+        fetchBillingData();
+        triggerRefresh();
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        alert(errorData.error || 'Failed to delete invoice.');
+      }
+    } catch (e) {
+      console.error('Delete invoice error:', e);
+      alert('An unexpected error occurred while deleting the invoice.');
+    } finally {
+      setDeletingInvoice(false);
+    }
+  };
+
   const handleRecordPayment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedInvoice || !paymentAmount) return;
+    if (!selectedInvoice || !paymentAmount || parseFloat(paymentAmount) <= 0) {
+      alert('Please enter a valid payment amount received greater than 0.');
+      return;
+    }
 
     try {
       const res = await fetch('/api/invoices/payment', {
@@ -174,11 +224,16 @@ export default function BillingPage() {
       if (res.ok) {
         setSelectedInvoice(null);
         setPaymentAmount('');
+        setPaymentNotesInput('');
         fetchBillingData();
         triggerRefresh();
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        alert(errorData.error || 'Failed to record payment.');
       }
     } catch (e) {
       console.error('Record payment error:', e);
+      alert('An unexpected error occurred while recording the payment.');
     }
   };
 
@@ -372,14 +427,24 @@ export default function BillingPage() {
                     </span>
                   </td>
                   <td className="p-3 text-right">
-                    {inv.status !== 'PAID' && (
+                    <div className="flex items-center justify-end gap-1.5">
+                      {inv.status !== 'PAID' && (
+                        <button
+                          onClick={() => setSelectedInvoice(inv)}
+                          className="px-2.5 py-1 rounded bg-[#FF3B00] text-white font-bold text-[11px] hover:bg-[#e03400] transition-colors"
+                        >
+                          Record Payment
+                        </button>
+                      )}
                       <button
-                        onClick={() => setSelectedInvoice(inv)}
-                        className="px-2.5 py-1 rounded bg-[#FF3B00] text-white font-bold text-[11px] hover:bg-[#e03400] transition-colors"
+                        type="button"
+                        onClick={() => setInvoiceToDelete(inv)}
+                        className="p-1.5 rounded-md text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors"
+                        title="Delete Invoice"
                       >
-                        Record Payment
+                        <Trash2 className="h-4 w-4" />
                       </button>
-                    )}
+                    </div>
                   </td>
                 </tr>
               );
@@ -575,6 +640,50 @@ export default function BillingPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* DELETE INVOICE CONFIRMATION MODAL */}
+      {invoiceToDelete && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setInvoiceToDelete(null);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 animate-in fade-in duration-200"
+        >
+          <div className="w-full max-w-md bg-card border-2 border-border shadow-2xl rounded-xl p-6 space-y-4 text-card-foreground">
+            <div className="flex items-center gap-3 border-b border-border pb-3">
+              <div className="p-2.5 rounded-xl bg-rose-500/10 text-rose-500 border border-rose-500/20">
+                <Trash2 className="h-6 w-6" />
+              </div>
+              <div>
+                <h2 className="font-extrabold text-base text-foreground">Delete Invoice</h2>
+                <p className="text-xs text-muted-foreground">Remove this invoice record from billing.</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-foreground leading-relaxed">
+              Are you sure you want to delete invoice <strong className="text-rose-500 font-bold">{invoiceToDelete.invoiceNumber}</strong> for <strong className="text-foreground">{invoiceToDelete.client?.name}</strong>?
+            </p>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-border">
+              <button
+                type="button"
+                onClick={() => setInvoiceToDelete(null)}
+                className="px-4 py-2 text-xs font-semibold rounded-md border border-input hover:bg-muted transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteInvoice}
+                disabled={deletingInvoice}
+                className="px-5 py-2 text-xs font-bold rounded-md bg-rose-500 text-white hover:bg-rose-600 clicky-btn flex items-center gap-1.5 transition-all shadow-xs"
+              >
+                <Trash2 className="h-4 w-4" />
+                <span>{deletingInvoice ? 'Deleting...' : 'Delete Invoice'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

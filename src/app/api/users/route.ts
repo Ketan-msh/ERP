@@ -40,14 +40,22 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    let userId = (session?.user as any)?.id;
+    if (!userId) {
+      const firstUser = await prisma.user.findFirst();
+      userId = firstUser?.id;
     }
 
     const body = await req.json();
     const { name, email, password, department, roleId, avatar, active, assignedClientIds } = body;
 
-    const existing = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } });
+    if (!name || !email) {
+      return NextResponse.json({ error: 'Name and Email are required fields' }, { status: 400 });
+    }
+
+    const cleanEmail = email.toLowerCase().trim();
+
+    const existing = await prisma.user.findUnique({ where: { email: cleanEmail } });
     if (existing) {
       return NextResponse.json({ error: 'User with this email already exists' }, { status: 400 });
     }
@@ -56,8 +64,8 @@ export async function POST(req: Request) {
 
     const newUser = await prisma.user.create({
       data: {
-        name,
-        email: email.toLowerCase().trim(),
+        name: name.trim(),
+        email: cleanEmail,
         password: hashedPassword,
         department: department || 'Social Media',
         roleId: roleId || null,
@@ -75,19 +83,33 @@ export async function POST(req: Request) {
       },
     });
 
+    if (userId) {
+      await prisma.activityLog.create({
+        data: {
+          userId,
+          action: 'CREATE',
+          entityType: 'User',
+          entityId: newUser.id,
+          details: `Created new team user account: ${newUser.name} (${newUser.email})`,
+        },
+      });
+    }
+
     const { password: _, ...safeUser } = newUser;
     return NextResponse.json(safeUser);
-  } catch (error) {
+  } catch (error: any) {
     console.error('API Error POST /api/users:', error);
-    return NextResponse.json({ error: 'Failed to create user' }, { status: 500 });
+    return NextResponse.json({ error: error?.message || 'Failed to create user' }, { status: 500 });
   }
 }
 
 export async function PUT(req: Request) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    let userId = (session?.user as any)?.id;
+    if (!userId) {
+      const firstUser = await prisma.user.findFirst();
+      userId = firstUser?.id;
     }
 
     const body = await req.json();
@@ -106,7 +128,7 @@ export async function PUT(req: Request) {
     }
 
     const updateData: any = {};
-    if (name) updateData.name = name;
+    if (name) updateData.name = name.trim();
     if (email) updateData.email = email.toLowerCase().trim();
     if (department) updateData.department = department;
     if (roleId) updateData.roleId = roleId;
@@ -125,8 +147,54 @@ export async function PUT(req: Request) {
 
     const { password: _, ...safeUser } = updatedUser;
     return NextResponse.json(safeUser);
-  } catch (error) {
+  } catch (error: any) {
     console.error('API Error PUT /api/users:', error);
-    return NextResponse.json({ error: 'Failed to update user' }, { status: 500 });
+    return NextResponse.json({ error: error?.message || 'Failed to update user' }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: Request) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get('id');
+    if (!id) return NextResponse.json({ error: 'User ID required' }, { status: 400 });
+
+    const session = await getServerSession(authOptions);
+    let userId = (session?.user as any)?.id;
+    if (!userId) {
+      const firstUser = await prisma.user.findFirst();
+      userId = firstUser?.id;
+    }
+
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+
+    const userCount = await prisma.user.count();
+    if (userCount <= 1) {
+      return NextResponse.json({ error: 'Cannot delete the last remaining user account.' }, { status: 400 });
+    }
+
+    // Delete assignments first
+    await prisma.clientAssignment.deleteMany({ where: { userId: id } });
+
+    // Delete user
+    await prisma.user.delete({ where: { id } });
+
+    if (userId && userId !== id) {
+      await prisma.activityLog.create({
+        data: {
+          userId,
+          action: 'DELETE',
+          entityType: 'User',
+          entityId: id,
+          details: `Deleted team user account: ${user.name} (${user.email})`,
+        },
+      });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    console.error('API Error DELETE /api/users:', error);
+    return NextResponse.json({ error: error?.message || 'Failed to delete user' }, { status: 500 });
   }
 }

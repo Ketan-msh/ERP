@@ -136,7 +136,7 @@ export async function PUT(req: Request) {
         ...(title && { title }),
         ...(description !== undefined && { description }),
         ...(platform && { platform }),
-        ...(scheduledDate && { scheduledDate: new Date(scheduledDate) }),
+        ...(scheduledDate !== undefined && { scheduledDate: scheduledDate ? new Date(scheduledDate) : null }),
         ...(status && { status }),
         ...(assigneeId !== undefined && { assigneeId }),
         ...(clientFeedbackNotes !== undefined && { clientFeedbackNotes }),

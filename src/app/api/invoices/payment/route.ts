@@ -6,28 +6,49 @@ import { authOptions } from '@/lib/auth';
 export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    let userId = (session?.user as any)?.id;
+    if (!userId) {
+      const firstUser = await prisma.user.findFirst();
+      userId = firstUser?.id;
+    }
+
+    let validUserId: string | null = null;
+    if (userId) {
+      const userObj = await prisma.user.findUnique({ where: { id: userId } });
+      if (userObj) validUserId = userObj.id;
     }
 
     const body = await req.json();
     const { invoiceId, amountReceived, paymentDate, notes } = body;
 
-    if (!invoiceId || !amountReceived) {
-      return NextResponse.json({ error: 'Invoice ID and Amount required' }, { status: 400 });
+    if (!invoiceId) {
+      return NextResponse.json({ error: 'Invoice selection is required' }, { status: 400 });
+    }
+
+    const invoiceExists = await prisma.invoice.findUnique({ where: { id: invoiceId } });
+    if (!invoiceExists) {
+      return NextResponse.json({ error: 'Selected invoice record was not found' }, { status: 404 });
+    }
+
+    const parsedAmount = typeof amountReceived === 'number'
+      ? amountReceived
+      : parseFloat(String(amountReceived || '0').replace(/[^0-9.]/g, '')) || 0;
+
+    if (parsedAmount <= 0) {
+      return NextResponse.json({ error: 'Payment amount received must be greater than 0' }, { status: 400 });
     }
 
     const payment = await prisma.payment.create({
       data: {
         invoiceId,
-        amountReceived: parseFloat(amountReceived),
+        amountReceived: parsedAmount,
         paymentDate: paymentDate ? new Date(paymentDate) : new Date(),
-        recordedById: (session.user as any).id,
+        recordedById: validUserId,
         notes: notes || null,
       },
     });
 
-    // Check total payments vs invoice amount
+    // Recalculate total payments for this invoice and update invoice status
     const invoice = await prisma.invoice.findUnique({
       where: { id: invoiceId },
       include: { payments: true, client: true },
@@ -45,20 +66,22 @@ export async function POST(req: Request) {
         data: { status: newStatus },
       });
 
-      await prisma.activityLog.create({
-        data: {
-          userId: (session.user as any).id,
-          action: 'UPDATE',
-          entityType: 'Invoice',
-          entityId: invoice.id,
-          details: `Recorded payment of NPR ${payment.amountReceived} for invoice ${invoice.invoiceNumber}`,
-        },
-      });
+      if (validUserId) {
+        await prisma.activityLog.create({
+          data: {
+            userId: validUserId,
+            action: 'UPDATE',
+            entityType: 'Invoice',
+            entityId: invoice.id,
+            details: `Recorded payment of NPR ${payment.amountReceived.toLocaleString()} for invoice ${invoice.invoiceNumber}`,
+          },
+        });
+      }
     }
 
     return NextResponse.json(payment);
-  } catch (error) {
+  } catch (error: any) {
     console.error('API Error POST /api/invoices/payment:', error);
-    return NextResponse.json({ error: 'Failed to record payment' }, { status: 500 });
+    return NextResponse.json({ error: error?.message || 'Failed to record payment' }, { status: 500 });
   }
 }

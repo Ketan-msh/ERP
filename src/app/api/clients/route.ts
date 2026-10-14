@@ -67,6 +67,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Client business name is required' }, { status: 400 });
     }
 
+    const parsedRetainer = typeof monthlyRetainer === 'number'
+      ? monthlyRetainer
+      : parseFloat(String(monthlyRetainer || '0').replace(/[^0-9.]/g, '')) || 0;
+
+    const parsedCycleDay = typeof billingCycleDay === 'number'
+      ? billingCycleDay
+      : parseInt(String(billingCycleDay || '1').replace(/[^0-9]/g, ''), 10) || 1;
+
     const newClient = await prisma.client.create({
       data: {
         name: name.trim(),
@@ -75,9 +83,9 @@ export async function POST(req: Request) {
         servicePackage: servicePackage || 'Social & Growth',
         packageTier: packageTier || 'Standard',
         status: status || 'ACTIVE',
-        monthlyRetainer: parseFloat(monthlyRetainer) || 0,
+        monthlyRetainer: parsedRetainer,
         startDate: startDate ? new Date(startDate) : new Date(),
-        billingCycleDay: parseInt(billingCycleDay) || 1,
+        billingCycleDay: Math.max(1, Math.min(31, parsedCycleDay)),
         assignedTeam: {
           create: (assignedUserIds || []).map((userId: string) => ({
             userId,

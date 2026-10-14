@@ -50,6 +50,54 @@ import {
   X,
 } from 'lucide-react';
 
+function DroppablePoolArea({
+  items,
+  onItemClick,
+}: {
+  items: any[];
+  onItemClick: (item: any) => void;
+}) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: 'unscheduled-pool',
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`p-4 rounded-xl border transition-all ${
+        isOver
+          ? 'border-[#FF3B00] bg-[#FF3B00]/15 ring-2 ring-[#FF3B00] shadow-lg'
+          : 'border-border bg-card shadow-xs'
+      }`}
+    >
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-[#FF3B00]" />
+          <h3 className="font-extrabold text-sm text-foreground">Planned List & Unscheduled Pool</h3>
+          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-[#FF3B00]/10 text-[#FF3B00] border border-[#FF3B00]/20">
+            {items.length} Planned Tasks
+          </span>
+        </div>
+        <p className="text-[11px] font-mono text-muted-foreground hidden sm:block">
+          ⚡ Drag items into calendar days to schedule, or drag back here to unschedule
+        </p>
+      </div>
+
+      {items.length === 0 ? (
+        <div className="py-5 text-center text-xs font-mono text-muted-foreground/60 border border-dashed border-border rounded-lg bg-muted/20">
+          Planned pool is currently empty. Drag scheduled items here from the calendar to move them back to planned status!
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5 max-h-48 overflow-y-auto p-1">
+          {items.map((item) => (
+            <DraggableContentCard key={item.id} item={item} onClick={() => onItemClick(item)} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DroppableDayCell({
   day,
   isCurrentDay,
@@ -71,14 +119,13 @@ function DroppableDayCell({
   return (
     <div
       ref={setNodeRef}
-      onClick={onQuickAdd}
-      className={`min-h-32 p-2 transition-colors relative flex flex-col justify-between group cursor-pointer ${
+      className={`min-h-32 p-2 transition-colors relative flex flex-col justify-between group ${
         isOver ? 'ring-2 ring-[#FF3B00] bg-[#FF3B00]/20 z-20 shadow-lg' : ''
       } ${
         isCurrentMonth ? 'bg-card' : 'bg-muted/30 text-muted-foreground/50'
       }`}
     >
-      <div className="flex justify-between items-center mb-1 pointer-events-none">
+      <div className="flex justify-between items-center mb-1">
         <span
           className={`text-xs font-bold h-6 w-6 rounded-full flex items-center justify-center ${
             isCurrentDay
@@ -95,7 +142,7 @@ function DroppableDayCell({
             e.stopPropagation();
             onQuickAdd();
           }}
-          className="opacity-0 group-hover:opacity-100 text-[#FF3B00] hover:scale-110 transition-all pointer-events-auto"
+          className="opacity-0 group-hover:opacity-100 text-[#FF3B00] hover:scale-110 transition-all cursor-pointer"
           title="Quick Add on this date"
         >
           <Plus className="h-4 w-4" />
@@ -371,9 +418,38 @@ export default function PlanningPage() {
     }
 
     const itemId = active.id as string;
-    const targetDateStr = over.id as string; // "YYYY-MM-DD"
+    const targetId = over.id as string;
 
-    const parts = targetDateStr.split('-');
+    if (targetId === 'unscheduled-pool') {
+      // Optimistically move item back to planned pool
+      setContentItems((prev) =>
+        prev.map((item) =>
+          item.id === itemId
+            ? { ...item, status: 'PLANNED', scheduledDate: null }
+            : item
+        )
+      );
+
+      try {
+        const res = await fetch('/api/content', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: itemId,
+            status: 'PLANNED',
+            scheduledDate: null,
+          }),
+        });
+        if (res.ok) {
+          triggerRefresh();
+        }
+      } catch (err) {
+        console.warn('Drag unschedule API error:', err);
+      }
+      return;
+    }
+
+    const parts = targetId.split('-');
     if (parts.length !== 3) return;
 
     const year = parseInt(parts[0], 10);
@@ -388,7 +464,7 @@ export default function PlanningPage() {
     setContentItems((prev) =>
       prev.map((item) =>
         item.id === itemId
-          ? { ...item, scheduledDate: targetIso }
+          ? { ...item, scheduledDate: targetIso, status: item.status === 'PLANNED' ? 'SCHEDULED' : item.status }
           : item
       )
     );
@@ -400,6 +476,7 @@ export default function PlanningPage() {
         body: JSON.stringify({
           id: itemId,
           scheduledDate: targetIso,
+          status: 'SCHEDULED',
         }),
       });
       if (res.ok) {
@@ -545,7 +622,7 @@ export default function PlanningPage() {
                 {format(currentMonth, 'MMMM yyyy')}
               </h2>
               <button
-                onClick={() => setCurrentMonth(new Date(2026, 8, 1))}
+                onClick={() => setCurrentMonth(new Date())}
                 className="text-xs font-mono text-[#FF3B00] hover:underline ml-2"
               >
                 Today
@@ -634,6 +711,14 @@ export default function PlanningPage() {
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
           >
+            {/* Planned List & Unscheduled Pool Drop Zone */}
+            <DroppablePoolArea
+              items={filteredContent.filter(
+                (item) => item.status === 'PLANNED' || !item.scheduledDate
+              )}
+              onItemClick={setSelectedItem}
+            />
+
             <div className="grid grid-cols-7 gap-px bg-border rounded-xl overflow-hidden border border-border shadow-sm">
               {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
                 <div key={d} className="bg-muted p-2 text-center text-xs font-bold uppercase tracking-wider text-muted-foreground">

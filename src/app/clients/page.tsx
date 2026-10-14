@@ -24,6 +24,7 @@ export default function ClientsPage() {
   const isSuperAdmin = effectiveRoleName === 'Super Admin';
   const [clients, setClients] = useState<any[]>([]);
   const [deletedIds, setDeletedIds] = useState<string[]>([]);
+  const [clientToDelete, setClientToDelete] = useState<any | null>(null);
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -116,7 +117,10 @@ export default function ClientsPage() {
 
   const handleCreateClient = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!name.trim()) {
+      alert('Please enter a valid Client Business Name.');
+      return;
+    }
     setSubmitting(true);
 
     try {
@@ -140,6 +144,8 @@ export default function ClientsPage() {
         setClients((prev) => [created, ...prev.filter((c) => c.id !== created.id)]);
         setShowAddModal(false);
         setName('');
+        setSearch('');
+        setStatusFilter('');
         setAssignedUserIds([]);
         fetchClients();
         triggerRefresh();
@@ -208,24 +214,32 @@ export default function ClientsPage() {
     }
   };
 
-  const handleDeleteClient = async (client: any, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    if (!client) return;
-    if (!confirm(`Are you sure you want to permanently delete "${client.name}"? This action cannot be undone.`)) {
-      return;
+  const handleRequestDelete = (client: any, e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
     }
+    if (!client) return;
+    setClientToDelete(client);
+  };
+
+  const confirmDeleteClient = async () => {
+    if (!clientToDelete) return;
+    const targetClient = clientToDelete;
     setDeletingClient(true);
-    setDeletedIds((prev) => [...prev, client.id]);
-    setClients((prev) => prev.filter((c) => c.id !== client.id));
+    setDeletedIds((prev) => [...prev, targetClient.id]);
+    setClients((prev) => prev.filter((c) => c.id !== targetClient.id));
     setEditingClient(null);
     setSelectedClient(null);
+    setClientToDelete(null);
 
     try {
-      const res = await fetch(`/api/clients/${client.id}`, {
+      const res = await fetch(`/api/clients/${targetClient.id}`, {
         method: 'DELETE',
       });
 
       if (res.ok) {
+        fetchClients();
         triggerRefresh();
       } else {
         const errData = await res.json().catch(() => ({}));
@@ -392,7 +406,7 @@ export default function ClientsPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={(e) => handleDeleteClient(client, e)}
+                    onClick={(e) => handleRequestDelete(client, e)}
                     className="p-1.5 rounded-md text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors"
                     title="Delete Client"
                   >
@@ -724,7 +738,7 @@ export default function ClientsPage() {
               <div className="flex justify-between items-center pt-2 border-t border-border">
                 <button
                   type="button"
-                  onClick={() => handleDeleteClient(editingClient)}
+                  onClick={() => handleRequestDelete(editingClient)}
                   disabled={deletingClient}
                   className="px-3 py-1.5 text-xs font-bold rounded-md bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 flex items-center gap-1 transition-all"
                 >
@@ -790,7 +804,7 @@ export default function ClientsPage() {
                   <span>Edit</span>
                 </button>
                 <button
-                  onClick={() => handleDeleteClient(selectedClient)}
+                  onClick={() => handleRequestDelete(selectedClient)}
                   disabled={deletingClient}
                   className="p-1.5 rounded-lg border border-rose-500/20 text-rose-500 hover:bg-rose-500/10 transition-all"
                   title="Delete Client"
@@ -925,6 +939,51 @@ export default function ClientsPage() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* CUSTOM IN-APP DELETE CONFIRMATION MODAL */}
+      {clientToDelete && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setClientToDelete(null);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 animate-in fade-in duration-200"
+        >
+          <div className="w-full max-w-md bg-card border-2 border-border shadow-2xl rounded-xl p-6 space-y-4 text-card-foreground">
+            <div className="flex items-center gap-3 border-b border-border pb-3">
+              <div className="p-2.5 rounded-xl bg-rose-500/10 text-rose-500 border border-rose-500/20">
+                <Trash2 className="h-6 w-6" />
+              </div>
+              <div>
+                <h2 className="font-extrabold text-base text-foreground">Delete Client Account</h2>
+                <p className="text-xs text-muted-foreground">This action will delete the account from your roster.</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-foreground leading-relaxed">
+              Are you sure you want to permanently delete <strong className="text-rose-500 font-bold">{clientToDelete.name}</strong>?
+            </p>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-border">
+              <button
+                type="button"
+                onClick={() => setClientToDelete(null)}
+                className="px-4 py-2 text-xs font-semibold rounded-md border border-input hover:bg-muted transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteClient}
+                disabled={deletingClient}
+                className="px-5 py-2 text-xs font-bold rounded-md bg-rose-500 text-white hover:bg-rose-600 clicky-btn flex items-center gap-1.5 transition-all shadow-xs"
+              >
+                <Trash2 className="h-4 w-4" />
+                <span>{deletingClient ? 'Deleting...' : 'Delete Account'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

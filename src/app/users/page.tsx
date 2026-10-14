@@ -15,6 +15,7 @@ import {
   Sparkles,
   Lock,
   X,
+  Trash2,
 } from 'lucide-react';
 
 export default function UsersPage() {
@@ -40,6 +41,10 @@ export default function UsersPage() {
   const [userRoleId, setUserRoleId] = useState('');
   const [userAssignedClients, setUserAssignedClients] = useState<string[]>([]);
   const [submittingUser, setSubmittingUser] = useState(false);
+
+  // Delete User Modal State
+  const [userToDelete, setUserToDelete] = useState<any | null>(null);
+  const [deletingUser, setDeletingUser] = useState(false);
 
   // Role Builder State
   const [showRoleModal, setShowRoleModal] = useState(false);
@@ -175,6 +180,33 @@ export default function UsersPage() {
     }
   };
 
+  const handleConfirmDeleteUser = async () => {
+    if (!userToDelete) return;
+    const target = userToDelete;
+    setDeletingUser(true);
+
+    try {
+      const res = await fetch(`/api/users?id=${target.id}`, {
+        method: 'DELETE',
+      });
+
+      if (res.ok) {
+        setUsers((prev) => prev.filter((u) => u.id !== target.id));
+        setUserToDelete(null);
+        fetchUsersAndRoles();
+        triggerRefresh();
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        alert(errorData.error || 'Failed to delete user.');
+      }
+    } catch (e) {
+      console.error('Delete user error:', e);
+      alert('An unexpected error occurred while deleting the user account.');
+    } finally {
+      setDeletingUser(false);
+    }
+  };
+
   const filteredUsers = users.filter((u) => {
     const matchesSearch = u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase());
     const matchesDept = !departmentFilter || u.department === departmentFilter;
@@ -278,6 +310,7 @@ export default function UsersPage() {
                   <th className="p-3">Assigned Clients</th>
                   <th className="p-3">Status</th>
                   <th className="p-3">Date Joined</th>
+                  <th className="p-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -335,6 +368,16 @@ export default function UsersPage() {
                     </td>
                     <td className="p-3 font-mono text-muted-foreground">
                       {new Date(u.dateJoined).toLocaleDateString()}
+                    </td>
+                    <td className="p-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => setUserToDelete(u)}
+                        className="p-1.5 rounded-md text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors"
+                        title="Delete User Account"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -594,6 +637,50 @@ export default function UsersPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* DELETE USER CONFIRMATION MODAL */}
+      {userToDelete && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setUserToDelete(null);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 animate-in fade-in duration-200"
+        >
+          <div className="w-full max-w-md bg-card border-2 border-border shadow-2xl rounded-xl p-6 space-y-4 text-card-foreground">
+            <div className="flex items-center gap-3 border-b border-border pb-3">
+              <div className="p-2.5 rounded-xl bg-rose-500/10 text-rose-500 border border-rose-500/20">
+                <Trash2 className="h-6 w-6" />
+              </div>
+              <div>
+                <h2 className="font-extrabold text-base text-foreground">Delete User Account</h2>
+                <p className="text-xs text-muted-foreground">Remove this user from your agency team roster.</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-foreground leading-relaxed">
+              Are you sure you want to delete <strong className="text-rose-500 font-bold">{userToDelete.name}</strong> (<span className="font-mono text-muted-foreground">{userToDelete.email}</span>)?
+            </p>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-border">
+              <button
+                type="button"
+                onClick={() => setUserToDelete(null)}
+                className="px-4 py-2 text-xs font-semibold rounded-md border border-input hover:bg-muted transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteUser}
+                disabled={deletingUser}
+                className="px-5 py-2 text-xs font-bold rounded-md bg-rose-500 text-white hover:bg-rose-600 clicky-btn flex items-center gap-1.5 transition-all shadow-xs"
+              >
+                <Trash2 className="h-4 w-4" />
+                <span>{deletingUser ? 'Deleting...' : 'Delete User'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

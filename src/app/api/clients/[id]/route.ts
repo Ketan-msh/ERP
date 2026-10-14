@@ -181,14 +181,19 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     });
     if (!client) return NextResponse.json({ error: 'Client not found' }, { status: 404 });
 
-    // Perform DB soft delete
-    await prisma.client.update({
-      where: { id },
-      data: { deletedAt: new Date() },
-    });
     markClientDeleted(id);
 
-    // Record Activity Log with diff
+    // Try hard delete first to completely purge from DB; fall back to soft delete
+    try {
+      await prisma.client.delete({ where: { id } });
+    } catch (e) {
+      await prisma.client.update({
+        where: { id },
+        data: { deletedAt: new Date() },
+      });
+    }
+
+    // Record Activity Log
     if (userId) {
       await prisma.activityLog.create({
         data: {

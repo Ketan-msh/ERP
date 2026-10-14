@@ -108,7 +108,7 @@ export default function DashboardPage() {
             className="rounded-md border border-input bg-card px-2.5 py-1 text-xs font-medium text-foreground outline-hidden focus:border-[#FF3B00]"
           >
             <option value="">All Clients</option>
-            {data?.clientHealthCards?.map((c: any) => (
+            {(data?.allClients || data?.clientHealthCards)?.map((c: any) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>

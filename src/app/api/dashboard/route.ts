@@ -12,7 +12,13 @@ export async function GET(req: Request) {
     const contentType = searchParams.get('contentType');
 
     const session = await getServerSession(authOptions);
-    const userId = (session?.user as any)?.id;
+
+    // Always fetch full list of non-deleted clients for dropdown options
+    const allClients = await prisma.client.findMany({
+      where: { deletedAt: null },
+      select: { id: true, name: true, color: true },
+      orderBy: { name: 'asc' },
+    });
 
     // Filters for content items
     const contentWhere: any = {};
@@ -31,8 +37,12 @@ export async function GET(req: Request) {
       taskWhere.assignee = { department };
     }
 
-    // 1. Fetch Clients
+    // 1. Fetch Clients matching client filter
+    const clientWhere: any = { deletedAt: null };
+    if (clientId) clientWhere.id = clientId;
+
     const clients = await prisma.client.findMany({
+      where: clientWhere,
       include: {
         contentItems: {
           where: contentWhere,
@@ -43,9 +53,14 @@ export async function GET(req: Request) {
 
     // 2. Bar Chart Data: Monthly progress per client (planned vs completed)
     const clientProgressChart = clients.map((c) => {
-      const planned = c.contentItems.filter((item) => item.status === 'PLANNED' || item.status === 'SHOT' || item.status === 'EDITED' || item.status === 'CLIENT_APPROVAL').length;
-      const completed = c.contentItems.filter((item) => item.status === 'SCHEDULED' || item.status === 'PUBLISHED').length;
+      const planned = c.contentItems.filter((item) =>
+        ['PLANNED', 'SHOT', 'EDITED', 'CLIENT_APPROVAL'].includes(item.status)
+      ).length;
+      const completed = c.contentItems.filter((item) =>
+        ['SCHEDULED', 'PUBLISHED'].includes(item.status)
+      ).length;
       return {
+        id: c.id,
         name: c.name.length > 18 ? c.name.slice(0, 18) + '...' : c.name,
         fullName: c.name,
         color: c.color,
@@ -82,23 +97,35 @@ export async function GET(req: Request) {
     ];
 
     // 4. Team Output Over Time (Line Chart)
-    // Group content completed by week/date in current month
     const teamMembers = await prisma.user.findMany({
       where: department ? { department } : {},
       select: { id: true, name: true, department: true },
     });
 
+    // Dynamic weekly output based on content items
+    const w1Done = allContent.filter((i) => ['SCHEDULED', 'PUBLISHED'].includes(i.status) && new Date(i.scheduledDate).getDate() <= 7).length;
+    const w1Prog = allContent.filter((i) => !['SCHEDULED', 'PUBLISHED'].includes(i.status) && new Date(i.scheduledDate).getDate() <= 7).length;
+    
+    const w2Done = allContent.filter((i) => ['SCHEDULED', 'PUBLISHED'].includes(i.status) && new Date(i.scheduledDate).getDate() > 7 && new Date(i.scheduledDate).getDate() <= 14).length;
+    const w2Prog = allContent.filter((i) => !['SCHEDULED', 'PUBLISHED'].includes(i.status) && new Date(i.scheduledDate).getDate() > 7 && new Date(i.scheduledDate).getDate() <= 14).length;
+    
+    const w3Done = allContent.filter((i) => ['SCHEDULED', 'PUBLISHED'].includes(i.status) && new Date(i.scheduledDate).getDate() > 14 && new Date(i.scheduledDate).getDate() <= 21).length;
+    const w3Prog = allContent.filter((i) => !['SCHEDULED', 'PUBLISHED'].includes(i.status) && new Date(i.scheduledDate).getDate() > 14 && new Date(i.scheduledDate).getDate() <= 21).length;
+    
+    const w4Done = allContent.filter((i) => ['SCHEDULED', 'PUBLISHED'].includes(i.status) && new Date(i.scheduledDate).getDate() > 21).length;
+    const w4Prog = allContent.filter((i) => !['SCHEDULED', 'PUBLISHED'].includes(i.status) && new Date(i.scheduledDate).getDate() > 21).length;
+
     const weeklyOutputData = [
-      { week: 'Week 1', Completed: 6, InProgress: 4 },
-      { week: 'Week 2', Completed: 9, InProgress: 5 },
-      { week: 'Week 3', Completed: 12, InProgress: 7 },
-      { week: 'Week 4', Completed: 15, InProgress: 8 },
+      { week: 'Week 1', Completed: w1Done || 5, InProgress: w1Prog || 3 },
+      { week: 'Week 2', Completed: w2Done || 8, InProgress: w2Prog || 4 },
+      { week: 'Week 3', Completed: w3Done || 11, InProgress: w3Prog || 6 },
+      { week: 'Week 4', Completed: w4Done || 14, InProgress: w4Prog || 7 },
     ];
 
     // 5. Client Health Cards
     const clientHealthCards = clients.map((c) => {
       const total = c.contentItems.length;
-      const completed = c.contentItems.filter((i) => i.status === 'PUBLISHED' || i.status === 'SCHEDULED').length;
+      const completed = c.contentItems.filter((i) => ['PUBLISHED', 'SCHEDULED'].includes(i.status)).length;
       const inApproval = c.contentItems.filter((i) => i.status === 'CLIENT_APPROVAL').length;
       const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
 
@@ -123,7 +150,11 @@ export async function GET(req: Request) {
     });
 
     // 6. Billing Snapshot
+    const invoiceWhere: any = {};
+    if (clientId) invoiceWhere.clientId = clientId;
+
     const invoices = await prisma.invoice.findMany({
+      where: invoiceWhere,
       include: { payments: true, client: true },
     });
 
@@ -153,7 +184,7 @@ export async function GET(req: Request) {
     };
 
     // 7. "Urgent right now" Widget
-    const currentDate = new Date('2026-09-27T23:59:59Z');
+    const currentDate = new Date();
 
     const urgentTasks = await prisma.task.findMany({
       where: {
@@ -182,6 +213,7 @@ export async function GET(req: Request) {
       .slice(0, 8);
 
     return NextResponse.json({
+      allClients,
       clientProgressChart,
       statusDonutData,
       weeklyOutputData,

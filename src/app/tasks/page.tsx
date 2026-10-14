@@ -112,7 +112,7 @@ export default function TasksPage() {
     }
   };
 
-  const currentDate = new Date('2026-09-27T23:59:59Z');
+  const currentDate = new Date();
 
   const urgencyGroups = [
     { key: 'URGENT', label: '🔴 Urgent Priority', color: '#FF3B00', badgeClass: 'bg-[#FF3B00] text-white' },

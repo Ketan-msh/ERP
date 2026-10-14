@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useSession, signOut } from 'next-auth/react';
 import { useImpersonation, useTheme } from '@/components/providers';
+import { useRouter } from 'next/navigation';
 import {
   Search,
   Sun,
@@ -14,12 +15,18 @@ import {
   Sparkles,
   ShieldAlert,
   History,
+  Building2,
+  Calendar,
+  CheckSquare,
+  Receipt,
+  X,
 } from 'lucide-react';
 import { AuditHistoryModal } from '@/components/audit-history-modal';
 
 export function Header() {
   const { data: session } = useSession();
   const { theme, setTheme } = useTheme();
+  const router = useRouter();
   const {
     openQuickAdd,
     effectiveRoleName,
@@ -31,7 +38,16 @@ export function Header() {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearchModal, setShowSearchModal] = useState(false);
+  const [searchResults, setSearchResults] = useState<{
+    clients: any[];
+    content: any[];
+    tasks: any[];
+    invoices: any[];
+  }>({ clients: [], content: [], tasks: [], invoices: [] });
+  const [searching, setSearching] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+
+  const searchContainerRef = useRef<HTMLDivElement>(null);
 
   const rolesList = [
     'Super Admin',
@@ -45,22 +61,209 @@ export function Header() {
   ];
 
   const user = session?.user as any;
-  const isSuperAdmin = user?.roleName === 'Super Admin' || true; // Allow testing impersonation
+  const isSuperAdmin = user?.roleName === 'Super Admin' || true;
+
+  // Search API fetch effect
+  useEffect(() => {
+    if (!searchQuery.trim() || searchQuery.trim().length < 2) {
+      setSearchResults({ clients: [], content: [], tasks: [], invoices: [] });
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setSearching(true);
+      fetch(`/api/search?q=${encodeURIComponent(searchQuery.trim())}`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data) setSearchResults(data);
+          setSearching(false);
+        })
+        .catch(() => setSearching(false));
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Click outside listener for search popup
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
+        setShowSearchModal(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const totalResults =
+    searchResults.clients.length +
+    searchResults.content.length +
+    searchResults.tasks.length +
+    searchResults.invoices.length;
 
   return (
     <header className="sticky top-0 z-20 flex h-16 w-full items-center justify-between border-b border-border bg-card/90 backdrop-blur-md px-6">
       {/* Global Search Bar */}
-      <div className="flex items-center gap-4 flex-1 max-w-md">
+      <div className="flex items-center gap-4 flex-1 max-w-md" ref={searchContainerRef}>
         <div className="relative w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <input
             type="text"
             placeholder="Search content, clients, tasks, invoices..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setShowSearchModal(true);
+            }}
             onFocus={() => setShowSearchModal(true)}
-            className="w-full rounded-md border border-input bg-background pl-9 pr-4 py-1.5 text-xs focus:border-[#FF3B00] focus:ring-1 focus:ring-[#FF3B00] outline-hidden transition-all"
+            className="w-full rounded-md border border-input bg-background pl-9 pr-8 py-1.5 text-xs focus:border-[#FF3B00] focus:ring-1 focus:ring-[#FF3B00] outline-hidden transition-all"
           />
+          {searchQuery && (
+            <button
+              onClick={() => {
+                setSearchQuery('');
+                setShowSearchModal(false);
+              }}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+
+          {/* Search Dropdown Overlay */}
+          {showSearchModal && searchQuery.trim().length >= 2 && (
+            <div className="absolute left-0 right-0 top-full mt-2 rounded-xl border border-border bg-card shadow-2xl overflow-hidden z-50 animate-in fade-in zoom-in-95 max-h-[80vh] overflow-y-auto">
+              {searching ? (
+                <div className="p-4 text-center text-xs text-muted-foreground font-mono">
+                  Searching agency database...
+                </div>
+              ) : totalResults === 0 ? (
+                <div className="p-4 text-center text-xs text-muted-foreground font-mono">
+                  No matching clients, content, tasks or invoices found for "{searchQuery}".
+                </div>
+              ) : (
+                <div className="p-2 space-y-3 divide-y divide-border/50 text-xs">
+                  {/* Clients */}
+                  {searchResults.clients.length > 0 && (
+                    <div className="pt-1">
+                      <div className="px-2 py-1 text-[10px] font-mono font-bold text-muted-foreground uppercase flex items-center gap-1">
+                        <Building2 className="h-3 w-3 text-[#FF3B00]" /> Client Accounts ({searchResults.clients.length})
+                      </div>
+                      <div className="space-y-1 mt-1">
+                        {searchResults.clients.map((c) => (
+                          <div
+                            key={c.id}
+                            onClick={() => {
+                              router.push('/clients');
+                              setShowSearchModal(false);
+                            }}
+                            className="flex items-center justify-between p-2 rounded-md hover:bg-muted cursor-pointer transition-colors"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: c.color }} />
+                              <span className="font-bold text-foreground">{c.name}</span>
+                            </div>
+                            <span className="text-[10px] font-mono text-muted-foreground">{c.servicePackage}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Content Items */}
+                  {searchResults.content.length > 0 && (
+                    <div className="pt-2">
+                      <div className="px-2 py-1 text-[10px] font-mono font-bold text-muted-foreground uppercase flex items-center gap-1">
+                        <Calendar className="h-3 w-3 text-blue-500" /> Content Deliverables ({searchResults.content.length})
+                      </div>
+                      <div className="space-y-1 mt-1">
+                        {searchResults.content.map((item) => (
+                          <div
+                            key={item.id}
+                            onClick={() => {
+                              router.push('/tracker');
+                              setShowSearchModal(false);
+                            }}
+                            className="flex items-center justify-between p-2 rounded-md hover:bg-muted cursor-pointer transition-colors"
+                          >
+                            <div>
+                              <p className="font-bold text-foreground">{item.title}</p>
+                              <p className="text-[10px] text-muted-foreground font-mono">
+                                {item.client?.name} • {item.platform}
+                              </p>
+                            </div>
+                            <span className="text-[10px] font-mono font-bold text-[#FF3B00] bg-[#FF3B00]/10 px-2 py-0.5 rounded">
+                              {item.status}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Tasks */}
+                  {searchResults.tasks.length > 0 && (
+                    <div className="pt-2">
+                      <div className="px-2 py-1 text-[10px] font-mono font-bold text-muted-foreground uppercase flex items-center gap-1">
+                        <CheckSquare className="h-3 w-3 text-amber-500" /> Action Tasks ({searchResults.tasks.length})
+                      </div>
+                      <div className="space-y-1 mt-1">
+                        {searchResults.tasks.map((task) => (
+                          <div
+                            key={task.id}
+                            onClick={() => {
+                              router.push('/tasks');
+                              setShowSearchModal(false);
+                            }}
+                            className="flex items-center justify-between p-2 rounded-md hover:bg-muted cursor-pointer transition-colors"
+                          >
+                            <div>
+                              <p className="font-bold text-foreground">{task.title}</p>
+                              <p className="text-[10px] text-muted-foreground font-mono">
+                                {task.client?.name || 'General Task'}
+                              </p>
+                            </div>
+                            <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500">
+                              {task.urgency}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Invoices */}
+                  {searchResults.invoices.length > 0 && (
+                    <div className="pt-2">
+                      <div className="px-2 py-1 text-[10px] font-mono font-bold text-muted-foreground uppercase flex items-center gap-1">
+                        <Receipt className="h-3 w-3 text-emerald-500" /> Billing Invoices ({searchResults.invoices.length})
+                      </div>
+                      <div className="space-y-1 mt-1">
+                        {searchResults.invoices.map((inv) => (
+                          <div
+                            key={inv.id}
+                            onClick={() => {
+                              router.push('/billing');
+                              setShowSearchModal(false);
+                            }}
+                            className="flex items-center justify-between p-2 rounded-md hover:bg-muted cursor-pointer transition-colors"
+                          >
+                            <div>
+                              <p className="font-bold text-foreground">{inv.invoiceNumber} - NPR {inv.amount.toLocaleString()}</p>
+                              <p className="text-[10px] text-muted-foreground font-mono">{inv.client?.name} • {inv.billingPeriod}</p>
+                            </div>
+                            <span className="text-[10px] font-mono font-bold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                              {inv.status}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
