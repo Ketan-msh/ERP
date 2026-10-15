@@ -22,6 +22,7 @@ import {
   Sparkles,
   User,
   Plus,
+  Camera,
 } from 'lucide-react';
 
 export default function ContentTrackerPage() {
@@ -187,6 +188,22 @@ export default function ContentTrackerPage() {
             className="flex items-center gap-1.5 rounded-md border border-input bg-card px-3 py-2 text-xs font-bold hover:bg-muted transition-colors"
           >
             <Download className="h-4 w-4 text-[#FF3B00]" /> Export CSV
+          </button>
+
+          <button
+            onClick={() => openQuickAdd('shoot')}
+            className="flex items-center gap-1.5 rounded-md border border-[#FF3B00]/40 bg-[#FF3B00]/10 px-3 py-2 text-xs font-bold text-[#FF3B00] hover:bg-[#FF3B00] hover:text-white transition-all clicky-btn"
+            title="Schedule a Shoot Day"
+          >
+            <Camera className="h-4 w-4" /> Add Shoot
+          </button>
+
+          <button
+            onClick={() => openQuickAdd('content')}
+            className="flex items-center gap-1.5 rounded-md bg-[#FF3B00] px-3.5 py-2 text-xs font-bold text-white hover:bg-[#e03400] transition-all clicky-btn"
+            title="Add a Content Item"
+          >
+            <Plus className="h-4 w-4 stroke-[3]" /> Add Content
           </button>
         </div>
       </div>

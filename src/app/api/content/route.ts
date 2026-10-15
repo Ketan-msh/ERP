@@ -22,6 +22,12 @@ export async function GET(req: Request) {
     if (assigneeId) where.assigneeId = assigneeId;
     if (myItemsOnly && userId) where.assigneeId = userId;
 
+    // Privacy filter: shared items visible to everyone; personal items only visible to their assignee/owner
+    where.OR = [
+      { isPersonal: false },
+      ...(userId ? [{ isPersonal: true, assigneeId: userId }] : []),
+    ];
+
     const items = await prisma.contentItem.findMany({
       where,
       include: {
@@ -69,18 +75,23 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { clientId, type, title, description, platform, scheduledDate, status, assigneeId, clientFeedbackNotes, approvalOutcome, attachments } = body;
+    const { clientId, isPersonal, type, title, description, platform, scheduledDate, status, assigneeId, clientFeedbackNotes, approvalOutcome, attachments } = body;
+
+    const finalIsPersonal = Boolean(isPersonal);
+    const finalAssigneeId = finalIsPersonal ? (assigneeId || userId || null) : (assigneeId || null);
+    const finalClientId = finalIsPersonal ? (clientId || null) : (clientId || null);
 
     const item = await prisma.contentItem.create({
       data: {
-        clientId,
-        type: type || 'REEL',
+        clientId: finalClientId,
+        isPersonal: finalIsPersonal,
+        type: type || (finalIsPersonal ? 'PERSONAL' : 'REEL'),
         title,
         description: description || null,
-        platform: platform || 'INSTAGRAM',
+        platform: platform || (finalIsPersonal ? 'PERSONAL' : 'INSTAGRAM'),
         scheduledDate: scheduledDate ? new Date(scheduledDate) : new Date(),
         status: status || 'PLANNED',
-        assigneeId: assigneeId || null,
+        assigneeId: finalAssigneeId,
         clientFeedbackNotes: clientFeedbackNotes || null,
         approvalOutcome: approvalOutcome || null,
         attachments: attachments ? (typeof attachments === 'string' ? attachments : JSON.stringify(attachments)) : null,
@@ -98,7 +109,9 @@ export async function POST(req: Request) {
           action: 'CREATE',
           entityType: 'ContentItem',
           entityId: item.id,
-          details: `Created ${item.type}: "${item.title}" for ${item.client.name}`,
+          details: finalIsPersonal
+            ? `Created personal calendar item: "${item.title}"`
+            : `Created ${item.type}: "${item.title}" for ${item.client?.name || 'Client'}`,
         },
       });
     }
@@ -120,7 +133,7 @@ export async function PUT(req: Request) {
     }
 
     const body = await req.json();
-    const { id, clientId, type, title, description, platform, scheduledDate, status, assigneeId, clientFeedbackNotes, approvalOutcome, attachments } = body;
+    const { id, clientId, isPersonal, type, title, description, platform, scheduledDate, status, assigneeId, clientFeedbackNotes, approvalOutcome, attachments } = body;
 
     if (!id) {
       return NextResponse.json({ error: 'ID is required' }, { status: 400 });
@@ -131,14 +144,15 @@ export async function PUT(req: Request) {
     const updated = await prisma.contentItem.update({
       where: { id },
       data: {
-        ...(clientId && { clientId }),
+        ...(clientId !== undefined && { clientId: clientId || null }),
+        ...(isPersonal !== undefined && { isPersonal }),
         ...(type && { type }),
         ...(title && { title }),
         ...(description !== undefined && { description }),
         ...(platform && { platform }),
         ...(scheduledDate !== undefined && { scheduledDate: scheduledDate ? new Date(scheduledDate) : null }),
         ...(status && { status }),
-        ...(assigneeId !== undefined && { assigneeId }),
+        ...(assigneeId !== undefined && { assigneeId: assigneeId || null }),
         ...(clientFeedbackNotes !== undefined && { clientFeedbackNotes }),
         ...(approvalOutcome !== undefined && { approvalOutcome }),
         ...(attachments !== undefined && { attachments: typeof attachments === 'string' ? attachments : JSON.stringify(attachments) }),

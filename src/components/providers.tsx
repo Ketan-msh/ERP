@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { SessionProvider, useSession } from 'next-auth/react';
 import { parsePermissions, PermissionsMap } from '@/lib/permissions';
+import { PersonalProfileModal } from '@/components/personal-profile-modal';
 
 interface ImpersonationContextType {
   isImpersonating: boolean;
@@ -13,7 +14,11 @@ interface ImpersonationContextType {
   quickAddOpen: boolean;
   setQuickAddOpen: (open: boolean) => void;
   quickAddType: 'content' | 'task' | 'shoot';
-  openQuickAdd: (type?: 'content' | 'task' | 'shoot') => void;
+  quickAddDate?: string | null;
+  openQuickAdd: (type?: 'content' | 'task' | 'shoot', initialDate?: string) => void;
+  profileModalOpen: boolean;
+  setProfileModalOpen: (open: boolean) => void;
+  openProfileModal: () => void;
   refreshTrigger: number;
   triggerRefresh: () => void;
 }
@@ -27,7 +32,11 @@ const ImpersonationContext = createContext<ImpersonationContextType>({
   quickAddOpen: false,
   setQuickAddOpen: () => {},
   quickAddType: 'content',
+  quickAddDate: null,
   openQuickAdd: () => {},
+  profileModalOpen: false,
+  setProfileModalOpen: () => {},
+  openProfileModal: () => {},
   refreshTrigger: 0,
   triggerRefresh: () => {},
 });
@@ -189,9 +198,17 @@ function AppStateBridge({ children }: { children: React.ReactNode }) {
     ? actualPermissions
     : ROLE_PERMISSIONS_PRESETS[effectiveRoleName] || ROLE_PERMISSIONS_PRESETS['Super Admin'];
 
-  const openQuickAdd = (type: 'content' | 'task' | 'shoot' = 'content') => {
+  const [quickAddDate, setQuickAddDate] = useState<string | null>(null);
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+
+  const openQuickAdd = (type: 'content' | 'task' | 'shoot' = 'content', initialDate?: string) => {
     setQuickAddType(type);
+    setQuickAddDate(initialDate || null);
     setQuickAddOpen(true);
+  };
+
+  const openProfileModal = () => {
+    setProfileModalOpen(true);
   };
 
   return (
@@ -205,12 +222,20 @@ function AppStateBridge({ children }: { children: React.ReactNode }) {
         quickAddOpen,
         setQuickAddOpen,
         quickAddType,
+        quickAddDate,
         openQuickAdd,
+        profileModalOpen,
+        setProfileModalOpen,
+        openProfileModal,
         refreshTrigger,
         triggerRefresh,
       }}
     >
       {children}
+      <PersonalProfileModal
+        isOpen={profileModalOpen}
+        onClose={() => setProfileModalOpen(false)}
+      />
     </ImpersonationContext.Provider>
   );
 }

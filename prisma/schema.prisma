@@ -79,12 +79,13 @@ model ClientAssignment {
 
 model ContentItem {
   id                  String   @id @default(cuid())
-  clientId            String
-  client              Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  type                String   // "SHOOT", "REEL", "STATIC_POST", "CAROUSEL", "STORY", "AD_CREATIVE"
+  clientId            String?
+  client              Client?  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  isPersonal          Boolean  @default(false)
+  type                String   // "SHOOT", "REEL", "STATIC_POST", "CAROUSEL", "STORY", "AD_CREATIVE", "PERSONAL"
   title               String
   description         String?
-  platform            String   // "INSTAGRAM", "FACEBOOK", "TIKTOK", "YOUTUBE", "LINKEDIN"
+  platform            String?  // "INSTAGRAM", "FACEBOOK", "TIKTOK", "YOUTUBE", "LINKEDIN", "PERSONAL"
   scheduledDate       DateTime
   status              String   @default("PLANNED") // "PLANNED", "SHOT", "EDITED", "CLIENT_APPROVAL", "SCHEDULED", "PUBLISHED"
   assigneeId          String?

@@ -62,13 +62,19 @@ export async function POST(req: Request) {
 
     const hashedPassword = await bcrypt.hash(password || 'password123', 10);
 
+    let finalRoleId = roleId || null;
+    if (!finalRoleId) {
+      const defaultRole = (await prisma.role.findFirst({ where: { name: 'Social Media Manager' } })) || (await prisma.role.findFirst());
+      finalRoleId = defaultRole?.id || null;
+    }
+
     const newUser = await prisma.user.create({
       data: {
         name: name.trim(),
         email: cleanEmail,
         password: hashedPassword,
         department: department || 'Social Media',
-        roleId: roleId || null,
+        roleId: finalRoleId,
         avatar: avatar || null,
         active: active !== undefined ? active : true,
         assignedClients: {
@@ -115,13 +121,14 @@ export async function PUT(req: Request) {
     const body = await req.json();
     const { id, name, email, password, department, roleId, avatar, active, assignedClientIds } = body;
 
-    if (!id) return NextResponse.json({ error: 'User ID required' }, { status: 400 });
+    const targetUserId = id || userId;
+    if (!targetUserId) return NextResponse.json({ error: 'User ID required' }, { status: 400 });
 
     if (assignedClientIds) {
-      await prisma.clientAssignment.deleteMany({ where: { userId: id } });
+      await prisma.clientAssignment.deleteMany({ where: { userId: targetUserId } });
       await prisma.clientAssignment.createMany({
         data: assignedClientIds.map((cId: string) => ({
-          userId: id,
+          userId: targetUserId,
           clientId: cId,
         })),
       });
@@ -137,7 +144,7 @@ export async function PUT(req: Request) {
     if (password) updateData.password = await bcrypt.hash(password, 10);
 
     const updatedUser = await prisma.user.update({
-      where: { id },
+      where: { id: targetUserId },
       data: updateData,
       include: {
         role: true,

@@ -16,10 +16,15 @@ import {
   Lock,
   X,
   Trash2,
+  Edit2,
+  Camera,
+  Upload,
 } from 'lucide-react';
+import { useSession } from 'next-auth/react';
 
 export default function UsersPage() {
-  const { effectivePermissions, refreshTrigger, triggerRefresh } = useImpersonation();
+  const { data: session } = useSession();
+  const { effectivePermissions, effectiveRoleName, refreshTrigger, triggerRefresh, openProfileModal } = useImpersonation();
   const [users, setUsers] = useState<any[]>([]);
   const [roles, setRoles] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
@@ -46,9 +51,22 @@ export default function UsersPage() {
   const [userToDelete, setUserToDelete] = useState<any | null>(null);
   const [deletingUser, setDeletingUser] = useState(false);
 
+  // Edit User Modal State
+  const [userToEdit, setUserToEdit] = useState<any | null>(null);
+  const [editUserName, setEditUserName] = useState('');
+  const [editUserEmail, setEditUserEmail] = useState('');
+  const [editUserAvatar, setEditUserAvatar] = useState('');
+  const [editUserDepartment, setEditUserDepartment] = useState('Social Media');
+  const [editUserRoleId, setEditUserRoleId] = useState('');
+  const [editUserActive, setEditUserActive] = useState(true);
+  const [editUserPassword, setEditUserPassword] = useState('');
+  const [savingUserEdit, setSavingUserEdit] = useState(false);
+  const editFileInputRef = React.useRef<HTMLInputElement>(null);
+
   // Role Builder State
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [roleName, setRoleName] = useState('');
+  const [submittingRole, setSubmittingRole] = useState(false);
   const [permissionsMatrix, setPermissionsMatrix] = useState<any>({
     dashboard: 'view',
     calendar: 'edit',
@@ -60,66 +78,193 @@ export default function UsersPage() {
     users: 'none',
   });
 
-  // Listen to Escape key to close modals
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        if (showAddUserModal) setShowAddUserModal(false);
-        if (showRoleModal) setShowRoleModal(false);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showAddUserModal, showRoleModal]);
-
-  const isSuperAdmin = true; // Route protection check
-
-  const fetchUsersAndRoles = () => {
-    setLoading(true);
-    fetch('/api/users')
-      .then((res) => (res.ok ? res.json() : []))
-      .then((data) => {
-        if (Array.isArray(data)) setUsers(data);
-      })
-      .catch((err) => console.error('Failed to fetch users:', err));
-
-    fetch('/api/roles')
-      .then((res) => (res.ok ? res.json() : []))
-      .then((data) => {
-        if (Array.isArray(data)) {
-          setRoles(data);
-          if (data.length > 0 && !userRoleId) setUserRoleId(data[0].id);
-        }
-      })
-      .catch((err) => console.error('Failed to fetch roles:', err));
-
-    fetch('/api/clients')
-      .then((res) => (res.ok ? res.json() : []))
-      .then((data) => {
-        if (Array.isArray(data)) setClients(data);
-        setLoading(false);
-      })
-      .catch((err) => {
-        console.error('Failed to fetch clients:', err);
-        setLoading(false);
-      });
-  };
-
-  useEffect(() => {
-    fetchUsersAndRoles();
-  }, [refreshTrigger]);
-
   // ESC key listener for modals
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         if (showAddUserModal) setShowAddUserModal(false);
         if (showRoleModal) setShowRoleModal(false);
+        if (userToEdit) setUserToEdit(null);
+        if (userToDelete) setUserToDelete(null);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showAddUserModal, showRoleModal]);
+  }, [showAddUserModal, showRoleModal, userToEdit, userToDelete]);
+
+  const isSuperAdmin = true; // Route protection check
+
+  const fetchUsersAndRoles = async () => {
+    setLoading(true);
+    try {
+      const [usersRes, rolesRes, clientsRes] = await Promise.all([
+        fetch('/api/users'),
+        fetch('/api/roles'),
+        fetch('/api/clients'),
+      ]);
+
+      if (usersRes.ok) {
+        const data = await usersRes.json();
+        if (Array.isArray(data)) setUsers(data);
+      } else {
+        console.error('Failed to fetch users HTTP', usersRes.status);
+      }
+
+      if (rolesRes.ok) {
+        const data = await rolesRes.json();
+        if (Array.isArray(data)) {
+          setRoles(data);
+          if (data.length > 0 && !userRoleId) {
+            setUserRoleId(data[0].id);
+          }
+        }
+      } else {
+        console.error('Failed to fetch roles HTTP', rolesRes.status);
+      }
+
+      if (clientsRes.ok) {
+        const data = await clientsRes.json();
+        if (Array.isArray(data)) setClients(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch users or roles:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchUsersAndRoles();
+  }, [refreshTrigger]);
+
+  const processMetaInstagramPhoto = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const maxSizeBytes = 10 * 1024 * 1024; // 10MB
+      if (file.size > maxSizeBytes) {
+        reject(
+          new Error(
+            `File size (${(file.size / (1024 * 1024)).toFixed(1)}MB) exceeds 10MB limit (Instagram / Meta standard). Please choose a photo under 10MB.`
+          )
+        );
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Failed to read image file.'));
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onerror = () => reject(new Error('Invalid image file format.'));
+        img.onload = () => {
+          try {
+            const squareSize = Math.min(img.width, img.height);
+            const cropX = (img.width - squareSize) / 2;
+            const cropY = (img.height - squareSize) / 2;
+
+            const targetDim = Math.min(squareSize, 800);
+            const canvas = document.createElement('canvas');
+            canvas.width = targetDim;
+            canvas.height = targetDim;
+
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+              resolve(event.target?.result as string);
+              return;
+            }
+
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+
+            ctx.drawImage(
+              img,
+              cropX,
+              cropY,
+              squareSize,
+              squareSize,
+              0,
+              0,
+              targetDim,
+              targetDim
+            );
+
+            const isTransparent = file.type === 'image/png' || file.type === 'image/webp' || file.type === 'image/gif';
+            const mimeType = isTransparent ? 'image/png' : 'image/jpeg';
+            const processedUrl = canvas.toDataURL(mimeType, 0.92);
+            resolve(processedUrl);
+          } catch (e) {
+            resolve(event.target?.result as string);
+          }
+        };
+        img.src = event.target?.result as string;
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleEditImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const processed = await processMetaInstagramPhoto(file);
+      setEditUserAvatar(processed);
+    } catch (err: any) {
+      alert(err.message || 'Failed to process image');
+    } finally {
+      e.target.value = '';
+    }
+  };
+
+  const handleOpenEditUser = (target: any) => {
+    setUserToEdit(target);
+    setEditUserName(target.name || '');
+    setEditUserEmail(target.email || '');
+    setEditUserAvatar(target.avatar || '');
+    setEditUserDepartment(target.department || 'Social Media');
+    setEditUserRoleId(target.roleId || (roles.length > 0 ? roles[0].id : ''));
+    setEditUserActive(target.active !== undefined ? target.active : true);
+    setEditUserPassword('');
+  };
+
+  const handleUpdateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userToEdit || !editUserName || !editUserEmail) return;
+    setSavingUserEdit(true);
+
+    try {
+      const payload: any = {
+        id: userToEdit.id,
+        name: editUserName.trim(),
+        email: editUserEmail.trim().toLowerCase(),
+        department: editUserDepartment,
+        roleId: editUserRoleId,
+        active: editUserActive,
+        avatar: editUserAvatar || null,
+      };
+      if (editUserPassword.trim()) {
+        payload.password = editUserPassword.trim();
+      }
+
+      const res = await fetch('/api/users', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        setUserToEdit(null);
+        fetchUsersAndRoles();
+        triggerRefresh();
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        alert(errorData.error || 'Failed to update user account.');
+      }
+    } catch (e) {
+      console.error('Update user error:', e);
+      alert('An unexpected error occurred while updating the user account.');
+    } finally {
+      setSavingUserEdit(false);
+    }
+  };
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -127,15 +272,16 @@ export default function UsersPage() {
     setSubmittingUser(true);
 
     try {
+      const selectedRoleId = userRoleId || (roles.length > 0 ? roles[0].id : '');
       const res = await fetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: userName,
-          email: userEmail,
-          password: userPassword,
+          name: userName.trim(),
+          email: userEmail.trim().toLowerCase(),
+          password: userPassword || 'password123',
           department: userDepartment,
-          roleId: userRoleId,
+          roleId: selectedRoleId,
           assignedClientIds: userAssignedClients,
         }),
       });
@@ -144,11 +290,16 @@ export default function UsersPage() {
         setShowAddUserModal(false);
         setUserName('');
         setUserEmail('');
+        setUserPassword('password123');
         fetchUsersAndRoles();
         triggerRefresh();
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        alert(errorData.error || 'Failed to create team member account.');
       }
     } catch (e) {
       console.error('Create user error:', e);
+      alert('An unexpected error occurred while creating user.');
     } finally {
       setSubmittingUser(false);
     }
@@ -156,14 +307,18 @@ export default function UsersPage() {
 
   const handleCreateCustomRole = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!roleName) return;
+    if (!roleName || !roleName.trim()) {
+      alert('Please enter a custom role title.');
+      return;
+    }
+    setSubmittingRole(true);
 
     try {
       const res = await fetch('/api/roles', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: roleName,
+          name: roleName.trim(),
           permissions: permissionsMatrix,
           isCustom: true,
         }),
@@ -174,9 +329,15 @@ export default function UsersPage() {
         setRoleName('');
         fetchUsersAndRoles();
         triggerRefresh();
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        alert(errorData.error || 'Failed to create custom role.');
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Create role error:', e);
+      alert(e?.message || 'An unexpected error occurred while creating role.');
+    } finally {
+      setSubmittingRole(false);
     }
   };
 
@@ -266,6 +427,73 @@ export default function UsersPage() {
       {/* TAB 1: USER MANAGEMENT */}
       {activeTab === 'users' && (
         <div className="space-y-4">
+          {/* YOUR PERSONAL PROFILE & DP BANNER */}
+          {(() => {
+            const currentLoggedIn =
+              users.find(
+                (u) =>
+                  u.id === (session?.user as any)?.id ||
+                  u.email === session?.user?.email
+              ) || users[0];
+
+            return (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-xl border border-[#FF3B00]/30 bg-card shadow-xs">
+                <div className="flex items-center gap-3.5 w-full sm:w-auto">
+                  <div className="relative group shrink-0">
+                    <div className="h-12 w-12 rounded-full overflow-hidden border-2 border-[#FF3B00] shadow-sm bg-background flex items-center justify-center">
+                      {currentLoggedIn?.avatar ? (
+                        <img
+                          src={currentLoggedIn.avatar}
+                          alt={currentLoggedIn.name}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <div className="h-full w-full bg-gradient-to-tr from-[#FF3B00] to-orange-400 flex items-center justify-center text-white font-bold text-lg">
+                          {(currentLoggedIn?.name || 'ME').slice(0, 2).toUpperCase()}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={openProfileModal}
+                      className="absolute inset-0 rounded-full bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer"
+                      title="Change Profile Picture"
+                    >
+                      <Camera className="h-4 w-4 text-white" />
+                    </button>
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-extrabold text-sm text-foreground truncate">
+                        {currentLoggedIn?.name || session?.user?.name || 'Your Profile'}
+                      </h3>
+                      <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-[#FF3B00]/15 text-[#FF3B00] border border-[#FF3B00]/30">
+                        {effectiveRoleName}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground font-mono truncate">
+                      {currentLoggedIn?.email || session?.user?.email || 'Logged in account'} • {currentLoggedIn?.department || 'Kathmandu HQ'}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1 font-mono">
+                      <Sparkles className="h-3 w-3 text-[#FF3B00]" />
+                      <span>Meta / Instagram Spec: Max 10MB • Auto 1:1 Square Crop • Instant DP Sync</span>
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={openProfileModal}
+                  className="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-[#FF3B00] text-white font-bold text-xs hover:bg-[#e03400] transition-all shadow-xs clicky-btn shrink-0 w-full sm:w-auto justify-center cursor-pointer"
+                >
+                  <Camera className="h-4 w-4" />
+                  <span>Change Profile Picture (DP)</span>
+                </button>
+              </div>
+            );
+          })()}
+
           <div className="flex flex-col sm:flex-row justify-between items-center gap-3 bg-card p-3 rounded-xl border border-border">
             <div className="relative flex-1 w-full">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -314,73 +542,98 @@ export default function UsersPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {filteredUsers.map((u) => (
-                  <tr key={u.id} className="hover:bg-muted/30">
-                    <td className="p-3">
-                      <div className="flex items-center gap-3">
-                        <img
-                          src={
-                            u.avatar ||
-                            'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80'
-                          }
-                          alt={u.name}
-                          className="h-8 w-8 rounded-full object-cover border border-border"
-                        />
-                        <div>
-                          <span className="font-bold text-foreground block">{u.name}</span>
-                          <span className="text-[10px] font-mono text-muted-foreground">{u.email}</span>
+                {filteredUsers.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="p-8 text-center text-muted-foreground font-mono">
+                      {loading ? (
+                        <div className="flex items-center justify-center gap-2">
+                          <div className="h-4 w-4 border-2 border-[#FF3B00] border-t-transparent rounded-full animate-spin" />
+                          <span>Loading team member accounts...</span>
                         </div>
-                      </div>
-                    </td>
-                    <td className="p-3">
-                      <span className="font-mono px-2 py-0.5 rounded bg-muted font-semibold text-foreground">
-                        {u.department}
-                      </span>
-                    </td>
-                    <td className="p-3 font-bold text-[#FF3B00]">{u.role?.name || 'Viewer'}</td>
-                    <td className="p-3 font-mono text-muted-foreground">
-                      {u.assignedClients?.length > 0 ? (
-                        <span className="flex flex-wrap gap-1">
-                          {u.assignedClients.map((a: any) => (
-                            <span
-                              key={a.client?.id}
-                              className="px-1.5 py-0.5 rounded text-[9px] font-bold text-white"
-                              style={{ backgroundColor: a.client?.color || '#FF3B00' }}
-                            >
-                              {a.client?.name.slice(0, 10)}
-                            </span>
-                          ))}
-                        </span>
                       ) : (
-                        <span>All / Global</span>
+                        <span>No team member accounts found. Click "+ Add User" above to create one.</span>
                       )}
                     </td>
-                    <td className="p-3">
-                      <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                          u.active
-                            ? 'bg-emerald-500/15 text-emerald-500 border border-emerald-500/30'
-                            : 'bg-rose-500/15 text-rose-500'
-                        }`}
-                      >
-                        {u.active ? 'Active' : 'Inactive'}
-                      </span>
-                    </td>
-                    <td className="p-3 font-mono text-muted-foreground">
-                      {new Date(u.dateJoined).toLocaleDateString()}
-                    </td>
-                    <td className="p-3 text-right">
-                      <button
-                        type="button"
-                        onClick={() => setUserToDelete(u)}
-                        className="p-1.5 rounded-md text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors"
-                        title="Delete User Account"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </td>
                   </tr>
-                ))}
+                ) : (
+                  filteredUsers.map((u) => (
+                    <tr key={u.id} className="hover:bg-muted/30">
+                      <td className="p-3">
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={
+                              u.avatar ||
+                              'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80'
+                            }
+                            alt={u.name}
+                            className="h-8 w-8 rounded-full object-cover border border-border"
+                          />
+                          <div>
+                            <span className="font-bold text-foreground block">{u.name}</span>
+                            <span className="text-[10px] font-mono text-muted-foreground">{u.email}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="p-3">
+                        <span className="font-mono px-2 py-0.5 rounded bg-muted font-semibold text-foreground">
+                          {u.department}
+                        </span>
+                      </td>
+                      <td className="p-3 font-bold text-[#FF3B00]">{u.role?.name || 'Viewer'}</td>
+                      <td className="p-3 font-mono text-muted-foreground">
+                        {u.assignedClients?.length > 0 ? (
+                          <span className="flex flex-wrap gap-1">
+                            {u.assignedClients.map((a: any) => (
+                              <span
+                                key={a.client?.id}
+                                className="px-1.5 py-0.5 rounded text-[9px] font-bold text-white"
+                                style={{ backgroundColor: a.client?.color || '#FF3B00' }}
+                              >
+                                {a.client?.name.slice(0, 10)}
+                              </span>
+                            ))}
+                          </span>
+                        ) : (
+                          <span>All / Global</span>
+                        )}
+                      </td>
+                      <td className="p-3">
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                            u.active
+                              ? 'bg-emerald-500/15 text-emerald-500 border border-emerald-500/30'
+                              : 'bg-rose-500/15 text-rose-500'
+                          }`}
+                        >
+                          {u.active ? 'Active' : 'Inactive'}
+                        </span>
+                      </td>
+                      <td className="p-3 font-mono text-muted-foreground">
+                        {new Date(u.dateJoined).toLocaleDateString()}
+                      </td>
+                      <td className="p-3 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditUser(u)}
+                            className="p-1.5 rounded-md text-muted-foreground hover:bg-muted hover:text-[#FF3B00] transition-colors"
+                            title="Edit User Role & Settings"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setUserToDelete(u)}
+                            className="p-1.5 rounded-md text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors"
+                            title="Delete User Account"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -507,6 +760,21 @@ export default function UsersPage() {
                 />
               </div>
 
+              <div>
+                <label className="block font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                  Initial Password (to hand out to member) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. password123"
+                  value={userPassword}
+                  onChange={(e) => setUserPassword(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:border-[#FF3B00] outline-hidden font-mono"
+                />
+                <p className="text-[11px] text-muted-foreground mt-1">Default is set to <code className="text-[#FF3B00] font-bold">password123</code>. You can change it before creating.</p>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold uppercase tracking-wider text-muted-foreground mb-1">
@@ -527,18 +795,23 @@ export default function UsersPage() {
                 </div>
                 <div>
                   <label className="block font-semibold uppercase tracking-wider text-muted-foreground mb-1">
-                    Assigned Role
+                    Assigned Role *
                   </label>
                   <select
-                    value={userRoleId}
+                    value={userRoleId || (roles.length > 0 ? roles[0].id : '')}
                     onChange={(e) => setUserRoleId(e.target.value)}
-                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:border-[#FF3B00] outline-hidden"
+                    required
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:border-[#FF3B00] outline-hidden font-medium"
                   >
-                    {roles.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.name}
-                      </option>
-                    ))}
+                    {roles.length === 0 ? (
+                      <option value="">No roles available</option>
+                    ) : (
+                      roles.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.name}
+                        </option>
+                      ))
+                    )}
                   </select>
                 </div>
               </div>
@@ -631,15 +904,204 @@ export default function UsersPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 font-bold rounded-md bg-[#FF3B00] text-white hover:bg-[#e03400] clicky-btn"
+                  disabled={submittingRole}
+                  className="px-5 py-2 font-bold rounded-md bg-[#FF3B00] text-white hover:bg-[#e03400] clicky-btn disabled:opacity-50"
                 >
-                  Save Custom Role
+                  {submittingRole ? 'Saving Role...' : 'Save Custom Role'}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
+      {/* EDIT USER MODAL */}
+      {userToEdit && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setUserToEdit(null);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 animate-in fade-in duration-200"
+        >
+          <div className="w-full max-w-md bg-card border-2 border-border shadow-2xl rounded-xl p-6 space-y-4">
+            <div className="flex justify-between items-center border-b border-border pb-3">
+              <h2 className="font-extrabold text-sm text-foreground flex items-center gap-2">
+                <Edit2 className="h-4 w-4 text-[#FF3B00]" /> Edit Member Role & Credentials
+              </h2>
+              <button onClick={() => setUserToEdit(null)} className="p-1 rounded text-muted-foreground hover:bg-muted">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateUser} className="space-y-4 text-xs">
+              {/* Profile / Display Picture */}
+              <div className="flex items-center gap-3.5 p-3 rounded-xl border border-border bg-muted/20">
+                <div className="relative group shrink-0">
+                  <div className="h-14 w-14 rounded-full overflow-hidden border-2 border-[#FF3B00] shadow-sm bg-background flex items-center justify-center">
+                    {editUserAvatar ? (
+                      <img
+                        src={editUserAvatar}
+                        alt="Profile Picture"
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="h-full w-full bg-gradient-to-tr from-[#FF3B00] to-orange-400 flex items-center justify-center text-white font-bold text-lg">
+                        {(editUserName || 'ME').slice(0, 2).toUpperCase()}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => editFileInputRef.current?.click()}
+                    className="absolute inset-0 rounded-full bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer"
+                    title="Change Photo (<10MB)"
+                  >
+                    <Camera className="h-4 w-4 text-white" />
+                  </button>
+                </div>
+
+                <input
+                  type="file"
+                  ref={editFileInputRef}
+                  onChange={handleEditImageFileChange}
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  className="hidden"
+                />
+
+                <div className="flex-1 space-y-1.5">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => editFileInputRef.current?.click()}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded bg-[#FF3B00]/10 hover:bg-[#FF3B00] text-[#FF3B00] hover:text-white font-bold text-[11px] transition-colors cursor-pointer border border-[#FF3B00]/30"
+                    >
+                      <Upload className="h-3 w-3" /> Upload DP (&lt;10MB)
+                    </button>
+                    {editUserAvatar && (
+                      <button
+                        type="button"
+                        onClick={() => setEditUserAvatar('')}
+                        className="px-2 py-1 rounded border border-rose-500/30 hover:bg-rose-500/10 text-rose-400 font-medium text-[11px] transition-colors cursor-pointer"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground font-mono">
+                    Instagram/Meta specs: Max 10MB • Auto square crop
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                  Full Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editUserName}
+                  onChange={(e) => setEditUserName(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:border-[#FF3B00] outline-hidden font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                  Email Address *
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={editUserEmail}
+                  onChange={(e) => setEditUserEmail(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:border-[#FF3B00] outline-hidden font-medium"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                    Department
+                  </label>
+                  <select
+                    value={editUserDepartment}
+                    onChange={(e) => setEditUserDepartment(e.target.value)}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:border-[#FF3B00] outline-hidden font-medium"
+                  >
+                    <option value="Social Media">Social Media</option>
+                    <option value="Content Production">Content Production</option>
+                    <option value="Ads">Ads Manager</option>
+                    <option value="Client Servicing">Client Servicing</option>
+                    <option value="Management">Management</option>
+                    <option value="Billing">Billing</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                    Assigned Role *
+                  </label>
+                  <select
+                    value={editUserRoleId}
+                    onChange={(e) => setEditUserRoleId(e.target.value)}
+                    required
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:border-[#FF3B00] outline-hidden font-medium"
+                  >
+                    {roles.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                  Reset Password (Leave blank to keep existing)
+                </label>
+                <input
+                  type="text"
+                  placeholder="Enter new password if changing"
+                  value={editUserPassword}
+                  onChange={(e) => setEditUserPassword(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:border-[#FF3B00] outline-hidden font-mono"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="editUserActive"
+                  checked={editUserActive}
+                  onChange={(e) => setEditUserActive(e.target.checked)}
+                  className="rounded border-input text-[#FF3B00] focus:ring-[#FF3B00]"
+                />
+                <label htmlFor="editUserActive" className="text-xs font-semibold text-foreground cursor-pointer select-none">
+                  Account Active (Uncheck to suspend access)
+                </label>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-border">
+                <button
+                  type="button"
+                  onClick={() => setUserToEdit(null)}
+                  className="px-4 py-2 font-semibold rounded-md border border-input hover:bg-muted"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingUserEdit}
+                  className="px-5 py-2 font-bold rounded-md bg-[#FF3B00] text-white hover:bg-[#e03400] clicky-btn"
+                >
+                  {savingUserEdit ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* DELETE USER CONFIRMATION MODAL */}
       {userToDelete && (
         <div

@@ -172,16 +172,18 @@ function DraggableContentCard({ item, onClick }: { item: any; onClick: () => voi
         isDragging ? 'opacity-20 scale-95' : 'opacity-100'
       }`}
       style={{
-        backgroundColor: item.client?.color || '#FF3B00',
+        backgroundColor: item.isPersonal ? '#8B5CF6' : (item.client?.color || '#FF3B00'),
       }}
     >
       <div className="flex items-center justify-between gap-1 pointer-events-none w-full">
         <div className="flex items-center gap-1 min-w-0 flex-1">
           <GripVertical className="h-3 w-3 opacity-60 group-hover/card:opacity-100 shrink-0" />
-          <span className="font-extrabold truncate leading-tight">{item.title}</span>
+          <span className="font-extrabold truncate leading-tight">
+            {item.isPersonal ? `🔒 ${item.title}` : item.title}
+          </span>
         </div>
         <span className="text-[8px] uppercase px-1 rounded-sm bg-black/30 font-mono shrink-0 leading-tight">
-          {item.type}
+          {item.isPersonal ? 'PERSONAL' : item.type}
         </span>
       </div>
       {item.assignee && (
@@ -197,8 +199,8 @@ export default function PlanningPage() {
   const { openQuickAdd, refreshTrigger, triggerRefresh } = useImpersonation();
   const [activeTab, setActiveTab] = useState<'calendar' | 'wizard'>('calendar');
 
-  // Calendar State
-  const [currentMonth, setCurrentMonth] = useState(new Date(2026, 8, 1)); // Sept 2026
+  // Calendar State - always opens in current month
+  const [currentMonth, setCurrentMonth] = useState(new Date());
   const [contentItems, setContentItems] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
@@ -209,6 +211,7 @@ export default function PlanningPage() {
   // Item Detail & Edit Modal state
   const [selectedItem, setSelectedItem] = useState<any | null>(null);
   const [editTitle, setEditTitle] = useState('');
+  const [editIsPersonal, setEditIsPersonal] = useState(false);
   const [editType, setEditType] = useState('REEL');
   const [editPlatform, setEditPlatform] = useState('INSTAGRAM');
   const [editStatus, setEditStatus] = useState('PLANNED');
@@ -222,6 +225,7 @@ export default function PlanningPage() {
   useEffect(() => {
     if (selectedItem) {
       setEditTitle(selectedItem.title || '');
+      setEditIsPersonal(Boolean(selectedItem.isPersonal));
       setEditType(selectedItem.type || 'REEL');
       setEditPlatform(selectedItem.platform || 'INSTAGRAM');
       setEditStatus(selectedItem.status || 'PLANNED');
@@ -247,12 +251,13 @@ export default function PlanningPage() {
         body: JSON.stringify({
           id: selectedItem.id,
           title: editTitle,
-          type: editType,
-          platform: editPlatform,
+          type: editIsPersonal ? 'PERSONAL' : editType,
+          platform: editIsPersonal ? 'PERSONAL' : editPlatform,
           status: editStatus,
           scheduledDate: editScheduledDate,
           assigneeId: editAssigneeId || null,
-          clientId: editClientId,
+          clientId: editIsPersonal ? null : (editClientId || null),
+          isPersonal: editIsPersonal,
           clientFeedbackNotes: editClientFeedbackNotes,
         }),
       });
@@ -289,8 +294,9 @@ export default function PlanningPage() {
   };
 
   // Planning Wizard State
+  const currentMonthStr = format(new Date(), 'yyyy-MM');
   const [wizardClientId, setWizardClientId] = useState('');
-  const [wizardMonth, setWizardMonth] = useState('2026-09');
+  const [wizardMonth, setWizardMonth] = useState(currentMonthStr);
   const [wizardRows, setWizardRows] = useState<
     {
       type: string;
@@ -303,22 +309,22 @@ export default function PlanningPage() {
     {
       type: 'REEL',
       platform: 'INSTAGRAM',
-      title: 'Monsoon Special Reel',
-      scheduledDate: '2026-09-05',
+      title: 'Monthly Spotlight Reel',
+      scheduledDate: `${currentMonthStr}-05`,
       assigneeId: '',
     },
     {
       type: 'CAROUSEL',
       platform: 'INSTAGRAM',
-      title: 'Top 5 Highlights Carousel',
-      scheduledDate: '2026-09-12',
+      title: 'Top Highlights Carousel',
+      scheduledDate: `${currentMonthStr}-12`,
       assigneeId: '',
     },
     {
       type: 'SHOOT',
       platform: 'INSTAGRAM',
       title: 'On-Location Shoot Day',
-      scheduledDate: '2026-09-18',
+      scheduledDate: `${currentMonthStr}-18`,
       assigneeId: '',
     },
   ]);
@@ -489,33 +495,42 @@ export default function PlanningPage() {
 
   // Template pre-fill helper
   const applyTemplate = (templateType: string) => {
+    const ym = wizardMonth || format(new Date(), 'yyyy-MM');
     if (templateType === 'standard') {
       setWizardRows([
-        { type: 'SHOOT', platform: 'INSTAGRAM', title: 'Monthly Shoot Day', scheduledDate: '2026-09-02', assigneeId: '' },
-        { type: 'REEL', platform: 'INSTAGRAM', title: 'Behind the Scenes Reel 1', scheduledDate: '2026-09-05', assigneeId: '' },
-        { type: 'CAROUSEL', platform: 'INSTAGRAM', title: 'Product Showcase Carousel', scheduledDate: '2026-09-08', assigneeId: '' },
-        { type: 'REEL', platform: 'INSTAGRAM', title: 'Trending Sound Reel 2', scheduledDate: '2026-09-12', assigneeId: '' },
-        { type: 'STATIC_POST', platform: 'FACEBOOK', title: 'Customer Review Graphic', scheduledDate: '2026-09-15', assigneeId: '' },
-        { type: 'REEL', platform: 'TIKTOK', title: 'Viral Challenge Short', scheduledDate: '2026-09-19', assigneeId: '' },
-        { type: 'CAROUSEL', platform: 'LINKEDIN', title: 'Industry Insights Carousel', scheduledDate: '2026-09-22', assigneeId: '' },
-        { type: 'REEL', platform: 'INSTAGRAM', title: 'Offer Promo Reel 4', scheduledDate: '2026-09-26', assigneeId: '' },
-        { type: 'AD_CREATIVE', platform: 'FACEBOOK', title: 'Monthly Retargeting Ad', scheduledDate: '2026-09-29', assigneeId: '' },
+        { type: 'SHOOT', platform: 'INSTAGRAM', title: 'Monthly Shoot Day', scheduledDate: `${ym}-02`, assigneeId: '' },
+        { type: 'REEL', platform: 'INSTAGRAM', title: 'Behind the Scenes Reel 1', scheduledDate: `${ym}-05`, assigneeId: '' },
+        { type: 'CAROUSEL', platform: 'INSTAGRAM', title: 'Product Showcase Carousel', scheduledDate: `${ym}-08`, assigneeId: '' },
+        { type: 'REEL', platform: 'INSTAGRAM', title: 'Trending Sound Reel 2', scheduledDate: `${ym}-12`, assigneeId: '' },
+        { type: 'STATIC_POST', platform: 'FACEBOOK', title: 'Customer Review Graphic', scheduledDate: `${ym}-15`, assigneeId: '' },
+        { type: 'REEL', platform: 'TIKTOK', title: 'Viral Challenge Short', scheduledDate: `${ym}-19`, assigneeId: '' },
+        { type: 'CAROUSEL', platform: 'LINKEDIN', title: 'Industry Insights Carousel', scheduledDate: `${ym}-22`, assigneeId: '' },
+        { type: 'REEL', platform: 'INSTAGRAM', title: 'Offer Promo Reel 4', scheduledDate: `${ym}-26`, assigneeId: '' },
+        { type: 'AD_CREATIVE', platform: 'FACEBOOK', title: 'Monthly Retargeting Ad', scheduledDate: `${ym}-29`, assigneeId: '' },
       ]);
     } else if (templateType === 'heavy-reels') {
       setWizardRows([
-        { type: 'SHOOT', platform: 'INSTAGRAM', title: 'Video Production Day', scheduledDate: '2026-09-03', assigneeId: '' },
-        { type: 'REEL', platform: 'INSTAGRAM', title: 'Reel 1: High Energy Edit', scheduledDate: '2026-09-06', assigneeId: '' },
-        { type: 'REEL', platform: 'INSTAGRAM', title: 'Reel 2: Tutorial / How-To', scheduledDate: '2026-09-10', assigneeId: '' },
-        { type: 'REEL', platform: 'TIKTOK', title: 'Reel 3: Comedy / Relatable', scheduledDate: '2026-09-14', assigneeId: '' },
-        { type: 'REEL', platform: 'INSTAGRAM', title: 'Reel 4: Client Testimonial', scheduledDate: '2026-09-18', assigneeId: '' },
-        { type: 'REEL', platform: 'YOUTUBE', title: 'Reel 5: Cinematic Short', scheduledDate: '2026-09-24', assigneeId: '' },
+        { type: 'SHOOT', platform: 'INSTAGRAM', title: 'Video Production Day', scheduledDate: `${ym}-03`, assigneeId: '' },
+        { type: 'REEL', platform: 'INSTAGRAM', title: 'Reel 1: High Energy Edit', scheduledDate: `${ym}-06`, assigneeId: '' },
+        { type: 'REEL', platform: 'INSTAGRAM', title: 'Reel 2: Tutorial / How-To', scheduledDate: `${ym}-10`, assigneeId: '' },
+        { type: 'REEL', platform: 'TIKTOK', title: 'Reel 3: Comedy / Relatable', scheduledDate: `${ym}-14`, assigneeId: '' },
+        { type: 'REEL', platform: 'INSTAGRAM', title: 'Reel 4: Client Testimonial', scheduledDate: `${ym}-18`, assigneeId: '' },
+        { type: 'REEL', platform: 'YOUTUBE', title: 'Reel 5: Cinematic Short', scheduledDate: `${ym}-24`, assigneeId: '' },
       ]);
     }
   };
 
   const handleWizardSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!wizardClientId || wizardRows.length === 0) return;
+    const targetClientId = wizardClientId || (clients.length > 0 ? clients[0].id : '');
+    if (!targetClientId) {
+      alert('Please select or create an Agency Client Account first.');
+      return;
+    }
+    if (wizardRows.length === 0) {
+      alert('Please add at least one deliverable row.');
+      return;
+    }
     setWizardSaving(true);
 
     try {
@@ -523,7 +538,7 @@ export default function PlanningPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          clientId: wizardClientId,
+          clientId: targetClientId,
           items: wizardRows,
         }),
       });
@@ -532,9 +547,14 @@ export default function PlanningPage() {
         setWizardSaving(false);
         setActiveTab('calendar');
         triggerRefresh();
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        alert(errorData.error || 'Failed to bulk create content items.');
+        setWizardSaving(false);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Wizard save failed:', err);
+      alert(err?.message || 'Wizard save failed.');
       setWizardSaving(false);
     }
   };
@@ -558,7 +578,9 @@ export default function PlanningPage() {
   const selectAllClients = () => setHiddenClients([]);
   const unselectAllClients = () => setHiddenClients(clients.map((c) => c.id));
 
-  const filteredContent = contentItems.filter((item) => !hiddenClients.includes(item.clientId));
+  const filteredContent = contentItems.filter(
+    (item) => item.isPersonal || !item.clientId || !hiddenClients.includes(item.clientId)
+  );
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -646,10 +668,18 @@ export default function PlanningPage() {
               </label>
 
               <button
+                onClick={() => openQuickAdd('shoot')}
+                className="flex items-center gap-1.5 rounded-md border border-[#FF3B00]/40 bg-[#FF3B00]/10 px-3 py-1.5 text-xs font-bold text-[#FF3B00] hover:bg-[#FF3B00] hover:text-white transition-all clicky-btn"
+                title="Schedule a Shoot Day"
+              >
+                <Camera className="h-4 w-4" /> Add Shoot
+              </button>
+              <button
                 onClick={() => openQuickAdd('content')}
                 className="flex items-center gap-1.5 rounded-md bg-[#FF3B00] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#e03400] transition-all clicky-btn"
+                title="Add a Content Post/Deliverable"
               >
-                <Plus className="h-4 w-4 stroke-[3]" /> Add Item
+                <Plus className="h-4 w-4 stroke-[3]" /> Add Content
               </button>
             </div>
           </div>
@@ -741,7 +771,7 @@ export default function PlanningPage() {
                     day={day}
                     isCurrentDay={isCurrentDay}
                     isCurrentMonth={isCurrentMonth}
-                    onQuickAdd={() => openQuickAdd('content')}
+                    onQuickAdd={() => openQuickAdd('content', dateId)}
                   >
                     {dayItems.map((item) => (
                       <DraggableContentCard
@@ -759,13 +789,15 @@ export default function PlanningPage() {
               {activeDragItem ? (
                 <div
                   className="rounded-lg px-2 py-0.5 text-[10px] font-semibold text-white shadow-2xl ring-2 ring-white scale-105 pointer-events-none w-fit max-w-full flex flex-col gap-0.5 cursor-grabbing"
-                  style={{ backgroundColor: activeDragItem.client?.color || '#FF3B00' }}
+                  style={{ backgroundColor: activeDragItem.isPersonal ? '#8B5CF6' : (activeDragItem.client?.color || '#FF3B00') }}
                 >
                   <div className="flex items-center gap-1 max-w-full">
                     <GripVertical className="h-2.5 w-2.5 opacity-80 shrink-0" />
-                    <span className="font-extrabold truncate max-w-[120px] leading-tight">{activeDragItem.title}</span>
+                    <span className="font-extrabold truncate max-w-[120px] leading-tight">
+                      {activeDragItem.isPersonal ? `🔒 ${activeDragItem.title}` : activeDragItem.title}
+                    </span>
                     <span className="text-[8px] uppercase px-1 rounded-sm bg-black/30 font-mono shrink-0 leading-tight">
-                      {activeDragItem.type}
+                      {activeDragItem.isPersonal ? 'PERSONAL' : activeDragItem.type}
                     </span>
                   </div>
                   {activeDragItem.assignee && (
@@ -1019,11 +1051,19 @@ export default function PlanningPage() {
               <div className="flex items-center gap-2">
                 <span
                   className="px-2.5 py-0.5 rounded text-[10px] font-bold text-white uppercase"
-                  style={{ backgroundColor: clients.find((c) => c.id === editClientId)?.color || '#FF3B00' }}
+                  style={{
+                    backgroundColor: editIsPersonal
+                      ? '#8B5CF6'
+                      : (clients.find((c) => c.id === editClientId)?.color || '#FF3B00'),
+                  }}
                 >
-                  {clients.find((c) => c.id === editClientId)?.name || selectedItem.client?.name || 'Client'}
+                  {editIsPersonal
+                    ? '🔒 Personal Item'
+                    : (clients.find((c) => c.id === editClientId)?.name || selectedItem.client?.name || 'Client')}
                 </span>
-                <h3 className="font-extrabold text-base text-foreground">Edit Content Deliverable</h3>
+                <h3 className="font-extrabold text-base text-foreground">
+                  {editIsPersonal ? 'Edit Personal Calendar Item' : 'Edit Content Deliverable'}
+                </h3>
               </div>
               <button
                 onClick={() => setSelectedItem(null)}
@@ -1051,117 +1091,167 @@ export default function PlanningPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold uppercase tracking-wider text-muted-foreground mb-1">
-                    Client Account *
+                    Target Destination / Client *
                   </label>
                   <select
-                    value={editClientId}
-                    onChange={(e) => setEditClientId(e.target.value)}
-                    className="w-full px-3 py-2 rounded-md border border-input bg-background font-medium focus:outline-hidden focus:ring-2 focus:ring-[#FF3B00]"
+                    value={editIsPersonal ? '__PERSONAL__' : editClientId}
+                    onChange={(e) => {
+                      if (e.target.value === '__PERSONAL__') {
+                        setEditIsPersonal(true);
+                        setEditClientId('');
+                      } else {
+                        setEditIsPersonal(false);
+                        setEditClientId(e.target.value);
+                      }
+                    }}
+                    className={`w-full px-3 py-2 rounded-md border bg-background font-medium focus:outline-hidden focus:ring-2 focus:ring-[#FF3B00] ${
+                      editIsPersonal ? 'border-purple-500/50 bg-purple-500/5 text-purple-400 font-bold' : 'border-input'
+                    }`}
                   >
-                    {clients.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
+                    <option value="__PERSONAL__">🔒 Personal (Only in my calendar)</option>
+                    <optgroup label="Agency Client Accounts">
+                      {clients.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </optgroup>
                   </select>
-                </div>
-
-                <div>
-                  <label className="block font-semibold uppercase tracking-wider text-muted-foreground mb-1">
-                    Assigned Lead
-                  </label>
-                  <select
-                    value={editAssigneeId}
-                    onChange={(e) => setEditAssigneeId(e.target.value)}
-                    className="w-full px-3 py-2 rounded-md border border-input bg-background font-medium focus:outline-hidden focus:ring-2 focus:ring-[#FF3B00]"
-                  >
-                    <option value="">Unassigned</option>
-                    {users.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.name} ({u.department})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-semibold uppercase tracking-wider text-muted-foreground mb-1">
-                    Format / Content Type
-                  </label>
-                  <select
-                    value={editType}
-                    onChange={(e) => setEditType(e.target.value)}
-                    className="w-full px-3 py-2 rounded-md border border-input bg-background font-medium focus:outline-hidden focus:ring-2 focus:ring-[#FF3B00]"
-                  >
-                    <option value="REEL">REEL</option>
-                    <option value="CAROUSEL">CAROUSEL</option>
-                    <option value="SHOOT">SHOOT</option>
-                    <option value="GRAPHIC">GRAPHIC</option>
-                    <option value="STORY">STORY</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-semibold uppercase tracking-wider text-muted-foreground mb-1">
-                    Platform
-                  </label>
-                  <select
-                    value={editPlatform}
-                    onChange={(e) => setEditPlatform(e.target.value)}
-                    className="w-full px-3 py-2 rounded-md border border-input bg-background font-medium focus:outline-hidden focus:ring-2 focus:ring-[#FF3B00]"
-                  >
-                    <option value="INSTAGRAM">INSTAGRAM</option>
-                    <option value="TIKTOK">TIKTOK</option>
-                    <option value="FACEBOOK">FACEBOOK</option>
-                    <option value="YOUTUBE">YOUTUBE</option>
-                    <option value="LINKEDIN">LINKEDIN</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-semibold uppercase tracking-wider text-muted-foreground mb-1">
-                    Deliverable Status
-                  </label>
-                  <select
-                    value={editStatus}
-                    onChange={(e) => setEditStatus(e.target.value)}
-                    className="w-full px-3 py-2 rounded-md border border-input bg-background font-bold text-[#FF3B00] focus:outline-hidden focus:ring-2 focus:ring-[#FF3B00]"
-                  >
-                    <option value="PLANNED">PLANNED</option>
-                    <option value="IN_PRODUCTION">IN_PRODUCTION</option>
-                    <option value="EDITED">EDITED</option>
-                    <option value="CLIENT_APPROVAL">CLIENT_APPROVAL</option>
-                    <option value="APPROVED">APPROVED</option>
-                    <option value="PUBLISHED">PUBLISHED</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-semibold uppercase tracking-wider text-muted-foreground mb-1">
-                    Scheduled Due Date *
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={editScheduledDate}
-                    onChange={(e) => setEditScheduledDate(e.target.value)}
-                    className="w-full px-3 py-2 rounded-md border border-input bg-background font-medium focus:outline-hidden focus:ring-2 focus:ring-[#FF3B00]"
-                  />
                 </div>
               </div>
 
-              <div>
-                <label className="block font-semibold uppercase tracking-wider text-muted-foreground mb-1">
-                  Client Feedback Notes / Brief
-                </label>
-                <textarea
-                  rows={3}
-                  value={editClientFeedbackNotes}
-                  onChange={(e) => setEditClientFeedbackNotes(e.target.value)}
-                  placeholder="Enter feedback, caption instructions, or client revisions..."
-                  className="w-full px-3 py-2 rounded-md border border-amber-500/40 bg-amber-500/5 focus:outline-hidden focus:ring-2 focus:ring-amber-500 text-foreground font-medium"
-                />
-              </div>
+              {editIsPersonal ? (
+                <div className="space-y-4 rounded-lg bg-purple-500/10 border border-purple-500/30 p-3.5">
+                  <div className="text-xs text-purple-300 font-semibold flex items-center gap-1.5">
+                    <span>🔒 Personal / Private Item</span>
+                    <span className="text-[10px] font-mono text-purple-300/80">(Only visible in your personal calendar view)</span>
+                  </div>
+                  <div>
+                    <label className="block font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                      Target Date *
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={editScheduledDate}
+                      onChange={(e) => setEditScheduledDate(e.target.value)}
+                      className="w-full px-3 py-2 rounded-md border border-input bg-background font-medium focus:outline-hidden focus:ring-2 focus:ring-purple-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                      Personal Notes / Description <span className="text-[10px] font-mono lowercase text-muted-foreground">(optional)</span>
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={editClientFeedbackNotes}
+                      onChange={(e) => setEditClientFeedbackNotes(e.target.value)}
+                      placeholder="Add private notes, reminders, or details..."
+                      className="w-full px-3 py-2 rounded-md border border-input bg-background text-foreground font-medium focus:outline-hidden focus:ring-2 focus:ring-purple-500"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                        Assigned Lead
+                      </label>
+                      <select
+                        value={editAssigneeId}
+                        onChange={(e) => setEditAssigneeId(e.target.value)}
+                        className="w-full px-3 py-2 rounded-md border border-input bg-background font-medium focus:outline-hidden focus:ring-2 focus:ring-[#FF3B00]"
+                      >
+                        <option value="">Unassigned</option>
+                        {users.map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.name} ({u.department})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                        Format / Content Type
+                      </label>
+                      <select
+                        value={editType}
+                        onChange={(e) => setEditType(e.target.value)}
+                        className="w-full px-3 py-2 rounded-md border border-input bg-background font-medium focus:outline-hidden focus:ring-2 focus:ring-[#FF3B00]"
+                      >
+                        <option value="REEL">REEL</option>
+                        <option value="CAROUSEL">CAROUSEL</option>
+                        <option value="SHOOT">SHOOT</option>
+                        <option value="GRAPHIC">GRAPHIC</option>
+                        <option value="STORY">STORY</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                        Platform
+                      </label>
+                      <select
+                        value={editPlatform}
+                        onChange={(e) => setEditPlatform(e.target.value)}
+                        className="w-full px-3 py-2 rounded-md border border-input bg-background font-medium focus:outline-hidden focus:ring-2 focus:ring-[#FF3B00]"
+                      >
+                        <option value="INSTAGRAM">INSTAGRAM</option>
+                        <option value="TIKTOK">TIKTOK</option>
+                        <option value="FACEBOOK">FACEBOOK</option>
+                        <option value="YOUTUBE">YOUTUBE</option>
+                        <option value="LINKEDIN">LINKEDIN</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                        Deliverable Status
+                      </label>
+                      <select
+                        value={editStatus}
+                        onChange={(e) => setEditStatus(e.target.value)}
+                        className="w-full px-3 py-2 rounded-md border border-input bg-background font-bold text-[#FF3B00] focus:outline-hidden focus:ring-2 focus:ring-[#FF3B00]"
+                      >
+                        <option value="PLANNED">PLANNED</option>
+                        <option value="IN_PRODUCTION">IN_PRODUCTION</option>
+                        <option value="EDITED">EDITED</option>
+                        <option value="CLIENT_APPROVAL">CLIENT_APPROVAL</option>
+                        <option value="APPROVED">APPROVED</option>
+                        <option value="PUBLISHED">PUBLISHED</option>
+                      </select>
+                    </div>
+
+                    <div className="col-span-2">
+                      <label className="block font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                        Scheduled Due Date *
+                      </label>
+                      <input
+                        type="date"
+                        required
+                        value={editScheduledDate}
+                        onChange={(e) => setEditScheduledDate(e.target.value)}
+                        className="w-full px-3 py-2 rounded-md border border-input bg-background font-medium focus:outline-hidden focus:ring-2 focus:ring-[#FF3B00]"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                      Client Feedback Notes / Brief
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={editClientFeedbackNotes}
+                      onChange={(e) => setEditClientFeedbackNotes(e.target.value)}
+                      placeholder="Enter feedback, caption instructions, or client revisions..."
+                      className="w-full px-3 py-2 rounded-md border border-amber-500/40 bg-amber-500/5 focus:outline-hidden focus:ring-2 focus:ring-amber-500 text-foreground font-medium"
+                    />
+                  </div>
+                </>
+              )}
 
               <div className="flex justify-between items-center pt-3 border-t border-border">
                 <button

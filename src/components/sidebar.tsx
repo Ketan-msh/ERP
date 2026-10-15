@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import { useImpersonation } from '@/components/providers';
 import { hasPermission } from '@/lib/permissions';
 import {
@@ -18,12 +19,37 @@ import {
   ChevronRight,
   Zap,
   Building2,
+  Camera,
 } from 'lucide-react';
 
 export function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
-  const { effectivePermissions, effectiveRoleName } = useImpersonation();
+  const { data: session } = useSession();
+  const { effectivePermissions, effectiveRoleName, openProfileModal, refreshTrigger } = useImpersonation();
+  const [currentAvatar, setCurrentAvatar] = useState<string | null>(null);
+  const [currentUserName, setCurrentUserName] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/api/users')
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          const sessionUserId = (session?.user as any)?.id;
+          const sessionUserEmail = session?.user?.email;
+          const current =
+            data.find((u: any) => u.id === sessionUserId) ||
+            data.find((u: any) => u.email === sessionUserEmail) ||
+            data[0];
+
+          if (current) {
+            setCurrentAvatar(current.avatar || null);
+            setCurrentUserName(current.name || null);
+          }
+        }
+      })
+      .catch(() => {});
+  }, [session, refreshTrigger]);
 
   const navItems = [
     {
@@ -154,16 +180,59 @@ export function Sidebar() {
         })}
       </nav>
 
+      {/* Current User Profile & DP Widget */}
+      <div className="border-t border-border p-2">
+        <button
+          onClick={openProfileModal}
+          className={`group w-full flex items-center gap-3 p-2 rounded-xl border border-border/60 bg-muted/30 hover:bg-[#FF3B00]/10 hover:border-[#FF3B00]/40 transition-all text-left cursor-pointer ${
+            collapsed ? 'justify-center p-1.5' : ''
+          }`}
+          title="My Profile - Click to Change Display Picture"
+        >
+          <div className="relative shrink-0">
+            <div className="h-8 w-8 rounded-full overflow-hidden border border-[#FF3B00] bg-background">
+              <img
+                src={
+                  currentAvatar ||
+                  (session?.user as any)?.avatar ||
+                  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80'
+                }
+                alt="Profile"
+                className="h-full w-full object-cover"
+              />
+            </div>
+            <div className="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+              <Camera className="h-3.5 w-3.5 text-white" />
+            </div>
+            <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-emerald-500 border border-background" />
+          </div>
+
+          {!collapsed && (
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-xs text-foreground truncate group-hover:text-[#FF3B00] transition-colors">
+                  {currentUserName || session?.user?.name || 'Ketan Shrestha'}
+                </span>
+                <Camera className="h-3 w-3 text-muted-foreground group-hover:text-[#FF3B00] transition-colors shrink-0" />
+              </div>
+              <span className="text-[10px] text-muted-foreground font-mono block truncate">
+                Change Picture / DP
+              </span>
+            </div>
+          )}
+        </button>
+      </div>
+
       {/* Footer Info */}
       {!collapsed && (
-        <div className="border-t border-border p-3">
-          <div className="rounded-lg bg-muted/40 p-2.5 text-[11px] font-mono text-muted-foreground flex flex-col gap-1 border border-border/40">
+        <div className="border-t border-border/50 px-3 py-2">
+          <div className="rounded-lg bg-muted/40 p-2 text-[10px] font-mono text-muted-foreground flex flex-col gap-0.5 border border-border/40">
             <div className="flex justify-between items-center">
               <span>Agency Team:</span>
               <span className="font-bold text-foreground">15+ Active</span>
             </div>
             <div className="flex justify-between items-center">
-              <span>System Status:</span>
+              <span>Status:</span>
               <span className="text-emerald-500 font-semibold">Online (Kathmandu)</span>
             </div>
           </div>

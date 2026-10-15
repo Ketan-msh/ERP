@@ -28,8 +28,12 @@ export function hasPermission(
   const map = typeof permissions === 'string' ? parsePermissions(permissions) : permissions || {};
   const userLevel = map[module] || 'none';
 
-  if (userLevel === 'full') return true;
-  if (requiredLevel === 'view' && (userLevel === 'view' || userLevel === 'edit')) return true;
-  if (requiredLevel === 'edit' && userLevel === 'edit') return true;
-  return false;
+  const levelHierarchy: Record<ModulePermission, number> = {
+    none: 0,
+    view: 1,
+    edit: 2,
+    full: 3,
+  };
+
+  return levelHierarchy[userLevel] >= levelHierarchy[requiredLevel];
 }

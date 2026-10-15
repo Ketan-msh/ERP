@@ -22,7 +22,7 @@ if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || (process.env.N
 }
 
 if (!process.env.DATABASE_URL) {
-  const dbPath = path.join(process.cwd(), 'prisma', 'dev.db');
+  const dbPath = path.join(process.cwd(), 'prisma', 'dev.db').replace(/\\/g, '/');
   process.env.DATABASE_URL = `file:${dbPath}`;
 }
 

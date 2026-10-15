@@ -43,12 +43,17 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
+        const avatarUrl =
+          user.avatar && !user.avatar.startsWith('data:')
+            ? user.avatar
+            : `/api/users/${user.id}/avatar`;
+
         return {
           id: user.id,
           email: user.email,
           name: user.name,
           department: user.department,
-          avatar: user.avatar || '',
+          avatar: avatarUrl,
           roleId: user.roleId || '',
           roleName: user.role?.name || 'Viewer',
           permissions: user.role?.permissions || '{}',
@@ -62,14 +67,21 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.id = user.id;
         token.department = (user as any).department;
-        token.avatar = (user as any).avatar;
+        token.avatar =
+          (user as any).avatar && !(user as any).avatar.startsWith('data:')
+            ? (user as any).avatar
+            : `/api/users/${user.id}/avatar`;
         token.roleId = (user as any).roleId;
         token.roleName = (user as any).roleName;
         token.permissions = (user as any).permissions;
         token.assignedClientIds = (user as any).assignedClientIds;
       }
       if (trigger === 'update' && session) {
-        return { ...token, ...session };
+        const safeSession = { ...session };
+        if (typeof safeSession.avatar === 'string' && safeSession.avatar.startsWith('data:')) {
+          safeSession.avatar = `/api/users/${token.id}/avatar`;
+        }
+        return { ...token, ...safeSession };
       }
       return token;
     },
@@ -77,7 +89,7 @@ export const authOptions: NextAuthOptions = {
       if (session.user) {
         (session.user as any).id = token.id;
         (session.user as any).department = token.department;
-        (session.user as any).avatar = token.avatar;
+        (session.user as any).avatar = token.avatar || `/api/users/${token.id}/avatar`;
         (session.user as any).roleId = token.roleId;
         (session.user as any).roleName = token.roleName;
         (session.user as any).permissions = token.permissions;

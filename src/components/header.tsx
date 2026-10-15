@@ -20,6 +20,8 @@ import {
   CheckSquare,
   Receipt,
   X,
+  User,
+  Camera,
 } from 'lucide-react';
 import { AuditHistoryModal } from '@/components/audit-history-modal';
 
@@ -32,6 +34,8 @@ export function Header() {
     effectiveRoleName,
     impersonatedRoleName,
     setImpersonatedRole,
+    openProfileModal,
+    refreshTrigger,
   } = useImpersonation();
 
   const [showRoleMenu, setShowRoleMenu] = useState(false);
@@ -46,8 +50,12 @@ export function Header() {
   }>({ clients: [], content: [], tasks: [], invoices: [] });
   const [searching, setSearching] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [currentAvatar, setCurrentAvatar] = useState<string | null>(null);
+  const [currentUserName, setCurrentUserName] = useState<string | null>(null);
 
   const searchContainerRef = useRef<HTMLDivElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+  const roleMenuRef = useRef<HTMLDivElement>(null);
 
   const rolesList = [
     'Super Admin',
@@ -61,7 +69,33 @@ export function Header() {
   ];
 
   const user = session?.user as any;
-  const isSuperAdmin = user?.roleName === 'Super Admin' || true;
+  const isSuperAdmin = user?.roleName === 'Super Admin' || user?.roleName === 'Manager';
+
+  // Synchronize avatar & name from session or DB
+  useEffect(() => {
+    fetch('/api/users')
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          const sessionUserId = (session?.user as any)?.id;
+          const sessionUserEmail = session?.user?.email;
+          const current =
+            data.find((u: any) => u.id === sessionUserId) ||
+            data.find((u: any) => u.email === sessionUserEmail) ||
+            data[0];
+
+          if (current) {
+            setCurrentAvatar(current.avatar || null);
+            setCurrentUserName(current.name || null);
+          }
+        }
+      })
+      .catch(() => {
+        const userAny = session?.user as any;
+        if (userAny?.avatar) setCurrentAvatar(userAny.avatar);
+        if (userAny?.name) setCurrentUserName(userAny.name);
+      });
+  }, [session, refreshTrigger]);
 
   // Search API fetch effect
   useEffect(() => {
@@ -84,11 +118,17 @@ export function Header() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Click outside listener for search popup
+  // Click outside listener for search popup, user menu, role menu
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
         setShowSearchModal(false);
+      }
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setShowUserMenu(false);
+      }
+      if (roleMenuRef.current && !roleMenuRef.current.contains(e.target as Node)) {
+        setShowRoleMenu(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -353,37 +393,84 @@ export function Header() {
         </button>
 
         {/* User Avatar Menu */}
-        <div className="relative">
+        <div className="relative" ref={userMenuRef}>
           <button
             onClick={() => setShowUserMenu(!showUserMenu)}
-            className="flex items-center gap-2 rounded-full border border-border p-0.5 hover:ring-2 hover:ring-[#FF3B00]/50 transition-all"
+            className="group relative flex items-center gap-2 rounded-full border border-border p-0.5 hover:ring-2 hover:ring-[#FF3B00]/50 transition-all cursor-pointer"
+            title="Account & Profile Picture (DP)"
           >
-            <img
-              src={
-                user?.avatar ||
-                'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80'
-              }
-              alt={user?.name || 'User'}
-              className="h-8 w-8 rounded-full object-cover"
-            />
+            <div className="relative h-8 w-8 rounded-full overflow-hidden">
+              <img
+                src={
+                  currentAvatar ||
+                  user?.avatar ||
+                  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80'
+                }
+                alt={currentUserName || user?.name || 'User'}
+                className="h-full w-full object-cover"
+              />
+              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                <Camera className="h-3.5 w-3.5 text-white" />
+              </div>
+            </div>
           </button>
 
           {showUserMenu && (
-            <div className="absolute right-0 mt-2 w-52 rounded-lg border border-border bg-card shadow-xl py-2 z-50 text-xs animate-in fade-in zoom-in-95">
-              <div className="px-3 py-2 border-b border-border">
-                <p className="font-bold text-foreground">{user?.name || 'Ketan Shrestha'}</p>
-                <p className="text-[11px] text-muted-foreground truncate">{user?.email || 'ketan@trexobyte.com'}</p>
-                <span className="inline-block mt-1 px-1.5 py-0.5 rounded bg-[#FF3B00]/10 text-[#FF3B00] font-mono text-[10px] font-semibold">
-                  {effectiveRoleName}
-                </span>
+            <div className="absolute right-0 mt-2 w-64 rounded-xl border border-border bg-card shadow-xl py-2 z-50 text-xs animate-in fade-in zoom-in-95">
+              <div className="px-3.5 py-2.5 border-b border-border flex items-center gap-3">
+                <div className="relative h-10 w-10 rounded-full overflow-hidden border border-[#FF3B00] shrink-0">
+                  <img
+                    src={
+                      currentAvatar ||
+                      user?.avatar ||
+                      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80'
+                    }
+                    alt={currentUserName || user?.name || 'User'}
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-bold text-foreground text-sm truncate">{currentUserName || user?.name || 'Ketan Shrestha'}</p>
+                  <p className="text-[11px] text-muted-foreground truncate">{user?.email || 'ketan@trexobyte.com'}</p>
+                  <span className="inline-block mt-0.5 px-2 py-0.5 rounded bg-[#FF3B00]/10 text-[#FF3B00] font-mono text-[10px] font-bold">
+                    {effectiveRoleName}
+                  </span>
+                </div>
               </div>
-              <button
-                onClick={() => signOut({ callbackUrl: '/login' })}
-                className="w-full text-left px-3 py-2 text-rose-500 hover:bg-rose-500/10 flex items-center gap-2 transition-colors font-medium mt-1"
-              >
-                <LogOut className="h-3.5 w-3.5" />
-                <span>Log Out</span>
-              </button>
+
+              <div className="p-1 space-y-0.5">
+                <button
+                  onClick={() => {
+                    setShowUserMenu(false);
+                    openProfileModal();
+                  }}
+                  className="w-full text-left px-3 py-2 text-foreground hover:bg-[#FF3B00]/10 hover:text-[#FF3B00] rounded-lg flex items-center gap-2.5 transition-colors font-bold cursor-pointer"
+                >
+                  <Camera className="h-4 w-4 text-[#FF3B00]" />
+                  <span>Change Profile Picture (DP)</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setShowUserMenu(false);
+                    openProfileModal();
+                  }}
+                  className="w-full text-left px-3 py-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg flex items-center gap-2.5 transition-colors font-medium cursor-pointer"
+                >
+                  <User className="h-4 w-4" />
+                  <span>Account & Password Settings</span>
+                </button>
+              </div>
+
+              <div className="border-t border-border pt-1 px-1">
+                <button
+                  onClick={() => signOut({ callbackUrl: '/login' })}
+                  className="w-full text-left px-3 py-2 text-rose-500 hover:bg-rose-500/10 rounded-lg flex items-center gap-2.5 transition-colors font-medium cursor-pointer"
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                  <span>Log Out</span>
+                </button>
+              </div>
             </div>
           )}
         </div>
