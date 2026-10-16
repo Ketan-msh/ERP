@@ -97,7 +97,7 @@ export function PersonalProfileModal({ isOpen, onClose }: PersonalProfileModalPr
       if (file.size > maxSizeBytes) {
         reject(
           new Error(
-            `File size (${(file.size / (1024 * 1024)).toFixed(1)}MB) exceeds 10MB limit (Instagram / Meta standard). Please choose a photo under 10MB.`
+            `Image size (${(file.size / (1024 * 1024)).toFixed(1)}MB) exceeds 10MB limit. Image must be < 10MB.`
           )
         );
         return;
@@ -371,10 +371,9 @@ export function PersonalProfileModal({ isOpen, onClose }: PersonalProfileModalPr
                 )}
               </div>
 
-              {/* Instagram Spec Indicator */}
-              <div className="flex items-center gap-1 text-[10px] text-muted-foreground font-mono pt-1">
-                <Sparkles className="h-3 w-3 text-[#FF3B00] shrink-0" />
-                <span>Instagram / Meta spec: Max 10MB • Auto 1:1 circle crop • JPG/PNG/WebP</span>
+              {/* Spec Indicator */}
+              <div className="flex items-center gap-1 text-[11px] text-muted-foreground font-mono pt-1">
+                <span>Image must be &lt; 10MB</span>
               </div>
 
               {/* Image URL Input Form */}

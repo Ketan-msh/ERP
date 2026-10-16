@@ -18,7 +18,7 @@ export default function ReportsPage() {
   const { refreshTrigger } = useImpersonation();
   const [clients, setClients] = useState<any[]>([]);
   const [selectedClientId, setSelectedClientId] = useState('all');
-  const [reportMonth, setReportMonth] = useState('2026-09');
+  const [reportMonth, setReportMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [contentItems, setContentItems] = useState<any[]>([]);
   const [invoices, setInvoices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);

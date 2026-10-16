@@ -5,7 +5,6 @@ import { usePathname } from 'next/navigation';
 import { Sidebar } from '@/components/sidebar';
 import { Header } from '@/components/header';
 import { QuickAddModal } from '@/components/quick-add-modal';
-import { FloatingQuickAdd } from '@/components/floating-quick-add';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -22,7 +21,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <Header />
         <main className="flex-1 overflow-y-auto p-6 bg-background relative">
           {children}
-          <FloatingQuickAdd />
           <QuickAddModal />
         </main>
       </div>

@@ -143,7 +143,7 @@ export default function UsersPage() {
       if (file.size > maxSizeBytes) {
         reject(
           new Error(
-            `File size (${(file.size / (1024 * 1024)).toFixed(1)}MB) exceeds 10MB limit (Instagram / Meta standard). Please choose a photo under 10MB.`
+            `Image size (${(file.size / (1024 * 1024)).toFixed(1)}MB) exceeds 10MB limit. Image must be < 10MB.`
           )
         );
         return;
@@ -475,9 +475,8 @@ export default function UsersPage() {
                     <p className="text-xs text-muted-foreground font-mono truncate">
                       {currentLoggedIn?.email || session?.user?.email || 'Logged in account'} • {currentLoggedIn?.department || 'Kathmandu HQ'}
                     </p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1 font-mono">
-                      <Sparkles className="h-3 w-3 text-[#FF3B00]" />
-                      <span>Meta / Instagram Spec: Max 10MB • Auto 1:1 Square Crop • Instant DP Sync</span>
+                    <p className="text-[11px] text-muted-foreground mt-0.5 font-mono">
+                      Image must be &lt; 10MB
                     </p>
                   </div>
                 </div>
@@ -986,8 +985,8 @@ export default function UsersPage() {
                       </button>
                     )}
                   </div>
-                  <p className="text-[10px] text-muted-foreground font-mono">
-                    Instagram/Meta specs: Max 10MB • Auto square crop
+                  <p className="text-[11px] text-muted-foreground font-mono">
+                    Image must be &lt; 10MB
                   </p>
                 </div>
               </div>

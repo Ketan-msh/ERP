@@ -44,9 +44,9 @@ export default function BillingPage() {
   const [clientId, setClientId] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState(`TB-2026-00${Math.floor(Math.random() * 90 + 10)}`);
   const [amount, setAmount] = useState('150000');
-  const [issueDate, setIssueDate] = useState('2026-09-01');
-  const [dueDate, setDueDate] = useState('2026-09-15');
-  const [billingPeriod, setBillingPeriod] = useState('September 2026');
+  const [issueDate, setIssueDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [dueDate, setDueDate] = useState(() => new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10));
+  const [billingPeriod, setBillingPeriod] = useState(() => new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }));
   const [paymentNotes, setPaymentNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
 

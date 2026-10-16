@@ -373,7 +373,7 @@ async function main() {
   }
 
   console.log('Seeding ContentItems...');
-  const now = new Date('2026-09-27T12:00:00Z');
+  const now = new Date('2026-10-15T12:00:00Z');
   const year = now.getFullYear();
   const month = now.getMonth();
 

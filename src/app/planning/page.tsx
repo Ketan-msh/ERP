@@ -53,12 +53,15 @@ import {
 function DroppablePoolArea({
   items,
   onItemClick,
+  isDragInProgress,
 }: {
   items: any[];
   onItemClick: (item: any) => void;
+  isDragInProgress?: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: 'unscheduled-pool',
+    data: { type: 'pool' },
   });
 
   return (
@@ -90,7 +93,12 @@ function DroppablePoolArea({
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5 max-h-48 overflow-y-auto p-1">
           {items.map((item) => (
-            <DraggableContentCard key={item.id} item={item} onClick={() => onItemClick(item)} />
+            <DraggableContentCard
+              key={item.id}
+              item={item}
+              onClick={() => onItemClick(item)}
+              isDragInProgress={isDragInProgress}
+            />
           ))}
         </div>
       )}
@@ -114,6 +122,7 @@ function DroppableDayCell({
   const dateId = format(day, 'yyyy-MM-dd');
   const { setNodeRef, isOver } = useDroppable({
     id: dateId,
+    data: { type: 'day', date: dateId },
   });
 
   return (
@@ -154,9 +163,18 @@ function DroppableDayCell({
   );
 }
 
-function DraggableContentCard({ item, onClick }: { item: any; onClick: () => void }) {
+function DraggableContentCard({
+  item,
+  onClick,
+  isDragInProgress,
+}: {
+  item: any;
+  onClick: () => void;
+  isDragInProgress?: boolean;
+}) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: item.id,
+    data: { type: 'card', item },
   });
 
   return (
@@ -170,7 +188,7 @@ function DraggableContentCard({ item, onClick }: { item: any; onClick: () => voi
       }}
       className={`rounded-lg px-2 py-1 text-[10px] font-semibold text-white shadow-xs cursor-grab active:cursor-grabbing hover:brightness-110 border border-black/20 group/card w-full flex flex-col gap-0.5 select-none transition-opacity ${
         isDragging ? 'opacity-20 scale-95' : 'opacity-100'
-      }`}
+      } ${isDragInProgress && !isDragging ? 'pointer-events-none' : ''}`}
       style={{
         backgroundColor: item.isPersonal ? '#8B5CF6' : (item.client?.color || '#FF3B00'),
       }}
@@ -388,23 +406,27 @@ export default function PlanningPage() {
   const [activeDragItem, setActiveDragItem] = useState<any | null>(null);
 
   const customCollisionDetection = (args: any) => {
+    // 1. Direct pointer within container
     const pointerCollisions = pointerWithin(args);
     if (pointerCollisions.length > 0) {
       return pointerCollisions;
     }
-    return rectIntersection(args);
+    // 2. Overlap intersection with closest target (largest overlap area)
+    const rectCollisions = rectIntersection(args);
+    if (rectCollisions.length > 0) {
+      return rectCollisions;
+    }
+    // 3. If dragging over whitespace/headers/out of bounds, DO NOT fallback to closestCenter.
+    // That prevents unwanted snaps to arbitrary cells (like Sep 27/28)
+    return [];
   };
 
   const getItemDateString = (scheduledDate: any) => {
     if (!scheduledDate) return '';
-    if (typeof scheduledDate === 'string' && scheduledDate.length >= 10) {
-      const datePart = scheduledDate.split('T')[0];
-      if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
-        return datePart;
-      }
-    }
     try {
-      return format(new Date(scheduledDate), 'yyyy-MM-dd');
+      const d = new Date(scheduledDate);
+      if (isNaN(d.getTime())) return '';
+      return format(d, 'yyyy-MM-dd');
     } catch {
       return '';
     }
@@ -425,13 +447,16 @@ export default function PlanningPage() {
 
     const itemId = active.id as string;
     const targetId = over.id as string;
+    const targetData = over.data?.current;
 
-    if (targetId === 'unscheduled-pool') {
+    const isPoolTarget = targetId === 'unscheduled-pool' || targetData?.type === 'pool';
+
+    if (isPoolTarget) {
       // Optimistically move item back to planned pool
       setContentItems((prev) =>
         prev.map((item) =>
           item.id === itemId
-            ? { ...item, status: 'PLANNED', scheduledDate: null }
+            ? { ...item, status: 'PLANNED' }
             : item
         )
       );
@@ -443,7 +468,6 @@ export default function PlanningPage() {
           body: JSON.stringify({
             id: itemId,
             status: 'PLANNED',
-            scheduledDate: null,
           }),
         });
         if (res.ok) {
@@ -455,7 +479,12 @@ export default function PlanningPage() {
       return;
     }
 
-    const parts = targetId.split('-');
+    const targetDateStr =
+      targetData?.date ||
+      (targetId.startsWith('20') && targetId.split('-').length === 3 ? targetId : null);
+    if (!targetDateStr) return;
+
+    const parts = targetDateStr.split('-');
     if (parts.length !== 3) return;
 
     const year = parseInt(parts[0], 10);
@@ -466,11 +495,14 @@ export default function PlanningPage() {
     const targetDate = new Date(year, month, day, 12, 0, 0);
     const targetIso = targetDate.toISOString();
 
+    const activeItem = contentItems.find((i) => i.id === itemId);
+    const nextStatus = activeItem?.status === 'PLANNED' ? 'SCHEDULED' : (activeItem?.status || 'SCHEDULED');
+
     // Optimistically update local state immediately (instant 0ms lag)
     setContentItems((prev) =>
       prev.map((item) =>
         item.id === itemId
-          ? { ...item, scheduledDate: targetIso, status: item.status === 'PLANNED' ? 'SCHEDULED' : item.status }
+          ? { ...item, scheduledDate: targetIso, status: nextStatus }
           : item
       )
     );
@@ -482,7 +514,7 @@ export default function PlanningPage() {
         body: JSON.stringify({
           id: itemId,
           scheduledDate: targetIso,
-          status: 'SCHEDULED',
+          status: nextStatus,
         }),
       });
       if (res.ok) {
@@ -668,13 +700,6 @@ export default function PlanningPage() {
               </label>
 
               <button
-                onClick={() => openQuickAdd('shoot')}
-                className="flex items-center gap-1.5 rounded-md border border-[#FF3B00]/40 bg-[#FF3B00]/10 px-3 py-1.5 text-xs font-bold text-[#FF3B00] hover:bg-[#FF3B00] hover:text-white transition-all clicky-btn"
-                title="Schedule a Shoot Day"
-              >
-                <Camera className="h-4 w-4" /> Add Shoot
-              </button>
-              <button
                 onClick={() => openQuickAdd('content')}
                 className="flex items-center gap-1.5 rounded-md bg-[#FF3B00] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#e03400] transition-all clicky-btn"
                 title="Add a Content Post/Deliverable"
@@ -747,6 +772,7 @@ export default function PlanningPage() {
                 (item) => item.status === 'PLANNED' || !item.scheduledDate
               )}
               onItemClick={setSelectedItem}
+              isDragInProgress={Boolean(activeDragItem)}
             />
 
             <div className="grid grid-cols-7 gap-px bg-border rounded-xl overflow-hidden border border-border shadow-sm">
@@ -760,7 +786,12 @@ export default function PlanningPage() {
                 const dateId = format(day, 'yyyy-MM-dd');
                 const isCurrentMonth = isSameMonth(day, currentMonth);
                 const dayItems = filteredContent
-                  .filter((item) => getItemDateString(item.scheduledDate) === dateId)
+                  .filter(
+                    (item) =>
+                      item.status !== 'PLANNED' &&
+                      item.scheduledDate &&
+                      getItemDateString(item.scheduledDate) === dateId
+                  )
                   .sort((a, b) => a.id.localeCompare(b.id));
 
                 const isCurrentDay = isToday(day);
@@ -778,6 +809,7 @@ export default function PlanningPage() {
                         key={item.id}
                         item={item}
                         onClick={() => setSelectedItem(item)}
+                        isDragInProgress={Boolean(activeDragItem)}
                       />
                     ))}
                   </DroppableDayCell>
@@ -1015,7 +1047,7 @@ export default function PlanningPage() {
                       type: 'REEL',
                       platform: 'INSTAGRAM',
                       title: '',
-                      scheduledDate: '2026-09-28',
+                      scheduledDate: format(new Date(), 'yyyy-MM-dd'),
                       assigneeId: '',
                     },
                   ])

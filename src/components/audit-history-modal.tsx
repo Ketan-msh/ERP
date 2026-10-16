@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
+import { useSession } from 'next-auth/react';
 import {
   History,
   RotateCcw,
@@ -29,15 +31,27 @@ interface AuditHistoryModalProps {
   onClose: () => void;
 }
 
+type CategoryType = 'ALL' | 'CONTENT' | 'TASKS' | 'CLIENTS' | 'BILLING' | 'TEAM';
+
 export function AuditHistoryModal({ isOpen, onClose }: AuditHistoryModalProps) {
-  const { refreshTrigger, triggerRefresh } = useImpersonation();
+  const { data: session } = useSession();
+  const { effectiveRoleName, refreshTrigger, triggerRefresh } = useImpersonation();
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [undoingId, setUndoingId] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Filters & Search
-  const [activeCategory, setActiveCategory] = useState<'ALL' | 'CONTENT' | 'TASKS' | 'CLIENTS' | 'USERS'>('ALL');
+  const [activeCategory, setActiveCategory] = useState<CategoryType>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+
+  const isSuperAdmin =
+    effectiveRoleName === 'Super Admin' ||
+    (session?.user as any)?.roleName === 'Super Admin';
 
   const fetchLogs = async () => {
     setLoading(true);
@@ -55,10 +69,10 @@ export function AuditHistoryModal({ isOpen, onClose }: AuditHistoryModalProps) {
   };
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && isSuperAdmin) {
       fetchLogs();
     }
-  }, [isOpen, refreshTrigger]);
+  }, [isOpen, isSuperAdmin, refreshTrigger]);
 
   const handleUndo = async (logId: string) => {
     setUndoingId(logId);
@@ -86,14 +100,26 @@ export function AuditHistoryModal({ isOpen, onClose }: AuditHistoryModalProps) {
     }
   };
 
+  const categoryCounts = useMemo(() => {
+    return {
+      ALL: logs.length,
+      CONTENT: logs.filter((l) => l.entityType === 'ContentItem').length,
+      TASKS: logs.filter((l) => l.entityType === 'Task').length,
+      CLIENTS: logs.filter((l) => l.entityType === 'Client').length,
+      BILLING: logs.filter((l) => l.entityType === 'Invoice' || l.entityType === 'Payment').length,
+      TEAM: logs.filter((l) => l.entityType === 'User' || l.entityType === 'Role').length,
+    };
+  }, [logs]);
+
   // Filtered and searched logs
   const filteredLogs = useMemo(() => {
     return logs.filter((log) => {
       // Category filter
       if (activeCategory === 'CONTENT' && log.entityType !== 'ContentItem') return false;
       if (activeCategory === 'TASKS' && log.entityType !== 'Task') return false;
-      if (activeCategory === 'CLIENTS' && log.entityType !== 'Client' && log.entityType !== 'Invoice') return false;
-      if (activeCategory === 'USERS' && log.entityType !== 'User' && log.entityType !== 'Role') return false;
+      if (activeCategory === 'CLIENTS' && log.entityType !== 'Client') return false;
+      if (activeCategory === 'BILLING' && log.entityType !== 'Invoice' && log.entityType !== 'Payment') return false;
+      if (activeCategory === 'TEAM' && log.entityType !== 'User' && log.entityType !== 'Role') return false;
 
       // Search filter
       if (searchQuery.trim()) {
@@ -111,7 +137,37 @@ export function AuditHistoryModal({ isOpen, onClose }: AuditHistoryModalProps) {
     });
   }, [logs, activeCategory, searchQuery]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
+
+  if (!isSuperAdmin) {
+    const restrictedContent = (
+      <div
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onClose();
+        }}
+        className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in fade-in duration-200"
+      >
+        <div className="w-full max-w-md bg-card border-2 border-border shadow-2xl rounded-2xl p-6 text-center space-y-4">
+          <div className="p-3 rounded-full bg-[#FF3B00]/15 text-[#FF3B00] w-14 h-14 mx-auto flex items-center justify-center">
+            <Shield className="h-7 w-7" />
+          </div>
+          <div>
+            <h3 className="text-lg font-black text-foreground">Super Admin Access Required</h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              The changes and audit log is exclusively accessible to Super Admins.
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-full py-2.5 px-4 text-xs font-bold rounded-lg bg-[#FF3B00] text-white hover:bg-[#e03400] transition-colors cursor-pointer"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    );
+    return createPortal(restrictedContent, document.body);
+  }
 
   const getActionBadge = (action: string) => {
     switch (action) {
@@ -180,14 +236,23 @@ export function AuditHistoryModal({ isOpen, onClose }: AuditHistoryModalProps) {
     }
   };
 
-  return (
+  const categories: { key: CategoryType; label: string; icon: string; count: number }[] = [
+    { key: 'ALL', label: 'All', icon: '⚡', count: categoryCounts.ALL },
+    { key: 'CONTENT', label: 'Content & Shoots', icon: '🎬', count: categoryCounts.CONTENT },
+    { key: 'TASKS', label: 'Tasks', icon: '📋', count: categoryCounts.TASKS },
+    { key: 'CLIENTS', label: 'Clients', icon: '🏢', count: categoryCounts.CLIENTS },
+    { key: 'BILLING', label: 'Invoices & Billing', icon: '💳', count: categoryCounts.BILLING },
+    { key: 'TEAM', label: 'Team & Roles', icon: '👥', count: categoryCounts.TEAM },
+  ];
+
+  const modalBody = (
     <div
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+      className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in fade-in duration-200 overflow-y-auto"
     >
-      <div className="w-full max-w-4xl bg-card border-2 border-border shadow-2xl rounded-2xl overflow-hidden max-h-[90vh] flex flex-col text-card-foreground">
+      <div className="relative w-full max-w-5xl bg-card border-2 border-border shadow-2xl rounded-2xl overflow-hidden max-h-[88vh] flex flex-col text-card-foreground my-auto">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border bg-muted/40 px-6 py-4 flex-shrink-0">
           <div className="flex items-center gap-3">
@@ -197,10 +262,13 @@ export function AuditHistoryModal({ isOpen, onClose }: AuditHistoryModalProps) {
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-lg font-black tracking-tight text-foreground">
-                  Changes Made & Revision History
+                  Centralized Changes Log
                 </h2>
                 <span className="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-[#FF3B00]/10 text-[#FF3B00] border border-[#FF3B00]/20">
-                  {logs.length} Total Events
+                  {logs.length} Events
+                </span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                  Super Admin
                 </span>
               </div>
               <p className="text-xs text-muted-foreground font-mono mt-0.5">
@@ -228,60 +296,34 @@ export function AuditHistoryModal({ isOpen, onClose }: AuditHistoryModalProps) {
           </div>
         </div>
 
-        {/* Toolbar: Category Filters & Search Bar */}
-        <div className="p-4 border-b border-border bg-card flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 flex-shrink-0">
+        {/* Toolbar: Discrete Category Filters & Search Bar */}
+        <div className="p-4 border-b border-border bg-card flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 flex-shrink-0">
           {/* Category Tabs */}
-          <div className="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0 text-xs">
-            <button
-              onClick={() => setActiveCategory('ALL')}
-              className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer whitespace-nowrap ${
-                activeCategory === 'ALL'
-                  ? 'bg-[#FF3B00] text-white shadow-xs'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-              }`}
-            >
-              All ({logs.length})
-            </button>
-            <button
-              onClick={() => setActiveCategory('CONTENT')}
-              className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer whitespace-nowrap ${
-                activeCategory === 'CONTENT'
-                  ? 'bg-[#FF3B00] text-white shadow-xs'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-              }`}
-            >
-              🎬 Content & Shoots
-            </button>
-            <button
-              onClick={() => setActiveCategory('TASKS')}
-              className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer whitespace-nowrap ${
-                activeCategory === 'TASKS'
-                  ? 'bg-[#FF3B00] text-white shadow-xs'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-              }`}
-            >
-              📋 Tasks
-            </button>
-            <button
-              onClick={() => setActiveCategory('CLIENTS')}
-              className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer whitespace-nowrap ${
-                activeCategory === 'CLIENTS'
-                  ? 'bg-[#FF3B00] text-white shadow-xs'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-              }`}
-            >
-              🏢 Clients & Invoices
-            </button>
-            <button
-              onClick={() => setActiveCategory('USERS')}
-              className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer whitespace-nowrap ${
-                activeCategory === 'USERS'
-                  ? 'bg-[#FF3B00] text-white shadow-xs'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-              }`}
-            >
-              👥 Team & Roles
-            </button>
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 lg:pb-0 text-xs">
+            {categories.map((cat) => {
+              const isActive = activeCategory === cat.key;
+              return (
+                <button
+                  key={cat.key}
+                  onClick={() => setActiveCategory(cat.key)}
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 border ${
+                    isActive
+                      ? 'bg-[#FF3B00] text-white border-[#FF3B00] shadow-xs'
+                      : 'border-border text-muted-foreground hover:text-foreground hover:bg-muted'
+                  }`}
+                >
+                  <span>{cat.icon}</span>
+                  <span>{cat.label}</span>
+                  <span
+                    className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full ${
+                      isActive ? 'bg-black/20 text-white' : 'bg-muted text-muted-foreground'
+                    }`}
+                  >
+                    {cat.count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
 
           {/* Search Box */}
@@ -446,4 +488,6 @@ export function AuditHistoryModal({ isOpen, onClose }: AuditHistoryModalProps) {
       </div>
     </div>
   );
+
+  return createPortal(modalBody, document.body);
 }

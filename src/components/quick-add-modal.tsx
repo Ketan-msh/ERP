@@ -378,17 +378,6 @@ export function QuickAddModal() {
               </button>
               <button
                 type="button"
-                onClick={() => setActiveTab('shoot')}
-                className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-md font-medium text-xs transition-all cursor-pointer ${
-                  activeTab === 'shoot'
-                    ? 'bg-[#FF3B00] text-white shadow-xs font-semibold'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                }`}
-              >
-                <Camera className="h-4 w-4" /> Shoot Plan
-              </button>
-              <button
-                type="button"
                 onClick={() => setActiveTab('task')}
                 className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-md font-medium text-xs transition-all cursor-pointer ${
                   activeTab === 'task'
